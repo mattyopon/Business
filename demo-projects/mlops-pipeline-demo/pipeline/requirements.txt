@@ -1,0 +1,29 @@
+# Core ML Libraries
+numpy==1.24.3
+pandas==2.0.3
+scikit-learn==1.3.0
+
+# MLflow for experiment tracking
+mlflow==2.9.2
+
+# Data visualization
+matplotlib==3.7.2
+seaborn==0.12.2
+
+# Jupyter and notebook support
+jupyter==1.0.0
+jupyterlab==4.0.5
+ipywidgets==8.1.0
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Data validation
+great-expectations==0.17.23
+
+# Progress bars
+tqdm==4.66.1
+
+# Model serialization
+joblib==1.3.2

@@ -1,0 +1,190 @@
+groups:
+  - name: application_alerts
+    interval: 30s
+    rules:
+      # High Error Rate Alert
+      - alert: HighErrorRate
+        expr: |
+          rate(app_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.endpoint }}"
+
+      # Slow Response Time Alert
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, rate(app_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "High latency detected"
+          description: "95th percentile latency is {{ $value }}s for {{ $labels.endpoint }}"
+
+      # Application Down Alert
+      - alert: ApplicationDown
+        expr: up{job="sample-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "Application is down"
+          description: "Sample application has been down for more than 1 minute"
+
+      # High Request Volume Alert
+      - alert: HighRequestVolume
+        expr: |
+          rate(app_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "Unusually high request volume"
+          description: "Request rate is {{ $value }} requests/second"
+
+  - name: infrastructure_alerts
+    interval: 30s
+    rules:
+      # High CPU Usage Alert
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value | humanize }}% on {{ $labels.instance }}"
+
+      # High Memory Usage Alert
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanize }}% on {{ $labels.instance }}"
+
+      # Node Exporter Down Alert
+      - alert: NodeExporterDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Node Exporter is down"
+          description: "Node Exporter has been down for more than 2 minutes"
+
+      # Disk Space Alert
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value | humanize }}% available on {{ $labels.instance }}"
+
+  - name: container_alerts
+    interval: 30s
+    rules:
+      # High Container CPU Alert
+      - alert: HighContainerCPU
+        expr: |
+          rate(container_cpu_usage_seconds_total{name!=""}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: container
+        annotations:
+          summary: "High container CPU usage"
+          description: "Container {{ $labels.name }} CPU usage is {{ $value | humanize }}%"
+
+      # High Container Memory Alert
+      - alert: HighContainerMemory
+        expr: |
+          (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: container
+        annotations:
+          summary: "High container memory usage"
+          description: "Container {{ $labels.name }} memory usage is {{ $value | humanize }}%"
+
+      # Container Restart Alert
+      - alert: ContainerRestarted
+        expr: |
+          rate(container_last_seen{name!=""}[5m]) > 0
+        for: 1m
+        labels:
+          severity: info
+          component: container
+        annotations:
+          summary: "Container restarted"
+          description: "Container {{ $labels.name }} has restarted"
+
+  - name: business_metrics_alerts
+    interval: 30s
+    rules:
+      # Low Order Success Rate
+      - alert: LowOrderSuccessRate
+        expr: |
+          (rate(app_orders_total{status="success"}[5m]) / rate(app_orders_total[5m])) < 0.8
+        for: 5m
+        labels:
+          severity: critical
+          component: business
+        annotations:
+          summary: "Low order success rate"
+          description: "Order success rate is {{ $value | humanizePercentage }} (below 80%)"
+
+      # Database Connection Pool Exhausted
+      - alert: HighDatabaseConnections
+        expr: app_database_connections > 40
+        for: 3m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High database connection count"
+          description: "Database connections at {{ $value }}, approaching limit"
+
+  - name: prometheus_alerts
+    interval: 30s
+    rules:
+      # Prometheus Configuration Reload Failed
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Prometheus configuration reload failed"
+          description: "Prometheus configuration reload has failed"
+
+      # Prometheus Target Down
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Prometheus target is down"
+          description: "{{ $labels.job }} on {{ $labels.instance }} has been down for more than 2 minutes"

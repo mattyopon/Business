@@ -1,0 +1,101 @@
+========================================
+SRE MONITORING DEMO - GETTING STARTED
+========================================
+
+Welcome! This is your Day 3 SRE Monitoring Demo project.
+
+WHAT YOU HAVE:
+- Prometheus for metrics collection
+- Grafana for visualization
+- Node Exporter for system metrics
+- Custom Flask app with metrics
+
+IMMEDIATE NEXT STEPS:
+
+1. START THE DEMO
+   Open terminal in this directory and run:
+   
+   docker-compose up -d
+
+   Wait 30 seconds for services to start.
+
+2. ACCESS GRAFANA
+   Open browser to: http://localhost:3000
+   Login: admin / admin
+   
+   Then go to:
+   Dashboards → Browse → "SRE Monitoring - System Overview"
+
+3. TEST THE APPLICATION
+   Open another terminal and run:
+   
+   curl http://localhost:8000/health
+   
+   Generate some traffic:
+   
+   for i in {1..50}; do curl http://localhost:8000/api/data; sleep 0.1; done
+   
+   Watch the metrics update in Grafana!
+
+4. EXPLORE PROMETHEUS
+   Open: http://localhost:9090
+   
+   Try these queries:
+   - rate(flask_http_request_total[5m])
+   - 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+5. READ THE DOCUMENTATION
+   - QUICKSTART.md - Quick 5-minute guide
+   - README.md - Full project documentation
+   - docs/SETUP.md - Detailed setup
+   - docs/USAGE.md - How to use everything
+   - docs/INTERVIEW_GUIDE.md - Prep for interviews
+
+COMMON COMMANDS:
+
+Start:     docker-compose up -d
+Stop:      docker-compose down
+Logs:      docker-compose logs -f
+Status:    docker-compose ps
+Restart:   docker-compose restart <service>
+
+TEST ENDPOINTS:
+
+Application:   http://localhost:8000
+Prometheus:    http://localhost:9090
+Grafana:       http://localhost:3000
+Node Exporter: http://localhost:9100/metrics
+
+TROUBLESHOOTING:
+
+If something doesn't work:
+1. Check Docker is running
+2. Run: docker-compose logs -f
+3. Read: docs/TROUBLESHOOTING.md
+4. Try: docker-compose down -v && docker-compose up -d --build
+
+PORTS USED:
+- 3000: Grafana web interface
+- 8000: Sample application API
+- 9090: Prometheus web interface
+- 9100: Node Exporter metrics
+
+INTERVIEW READY:
+
+This project demonstrates:
+✓ SRE monitoring principles
+✓ Docker & containerization
+✓ Prometheus & PromQL
+✓ Grafana dashboards
+✓ Application instrumentation
+✓ Infrastructure as Code
+
+Read docs/INTERVIEW_GUIDE.md for talking points!
+
+========================================
+
+Ready to get started? Run: docker-compose up -d
+
+Questions? Check the docs/ directory!
+
+========================================

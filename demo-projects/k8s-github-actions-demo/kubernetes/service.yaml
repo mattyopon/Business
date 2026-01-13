@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app-service
+  labels:
+    app: demo-app
+spec:
+  # サービスタイプ: NodePort (ローカル環境でアクセスしやすくするため)
+  type: NodePort
+
+  # セレクター
+  selector:
+    app: demo-app
+
+  # ポート設定
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80          # Service内部ポート
+    targetPort: 3000  # コンテナのポート
+    nodePort: 30080   # 外部アクセス用ポート (30000-32767の範囲)
+
+  # セッションアフィニティ (オプション)
+  sessionAffinity: None

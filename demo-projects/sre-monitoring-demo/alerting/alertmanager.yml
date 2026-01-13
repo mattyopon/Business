@@ -1,0 +1,73 @@
+global:
+  resolve_timeout: 5m
+
+# Route configuration
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'cluster', 'service']
+
+  # Wait time before sending first notification
+  group_wait: 10s
+
+  # Wait time before sending notification about new alerts
+  group_interval: 10s
+
+  # Wait time before sending notification about resolved alerts
+  repeat_interval: 12h
+
+  # Sub-routes
+  routes:
+    # Critical alerts
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      continue: true
+
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+      continue: true
+
+    # Business metrics alerts
+    - match:
+        component: business
+      receiver: 'business-receiver'
+
+# Receivers configuration
+receivers:
+  # Default receiver (logs only)
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://sample-app:5000/webhook/alerts'
+        send_resolved: true
+
+  # Critical alerts receiver
+  - name: 'critical-receiver'
+    webhook_configs:
+      - url: 'http://sample-app:5000/webhook/critical'
+        send_resolved: true
+
+  # Warning alerts receiver
+  - name: 'warning-receiver'
+    webhook_configs:
+      - url: 'http://sample-app:5000/webhook/warning'
+        send_resolved: true
+
+  # Business metrics receiver
+  - name: 'business-receiver'
+    webhook_configs:
+      - url: 'http://sample-app:5000/webhook/business'
+        send_resolved: true
+
+# Inhibition rules (suppress alerts based on other alerts)
+inhibit_rules:
+  # Suppress warning alerts when critical alerts are firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']

@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  labels:
+    app: demo-app
+spec:
+  # レプリカ数
+  replicas: 3
+
+  # セレクター
+  selector:
+    matchLabels:
+      app: demo-app
+
+  # デプロイメント戦略
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+
+  # Podテンプレート
+  template:
+    metadata:
+      labels:
+        app: demo-app
+        version: v1
+    spec:
+      # セキュリティコンテキスト
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      containers:
+      - name: demo-app
+        image: demo-app:latest
+        imagePullPolicy: Never  # Minikubeでローカルイメージを使用
+
+        # ポート設定
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+
+        # 環境変数 (ConfigMapから読み込み)
+        envFrom:
+        - configMapRef:
+            name: demo-app-config
+
+        # リソース制限
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        # Liveness Probe (アプリが生きているかチェック)
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+
+        # Readiness Probe (トラフィックを受け入れる準備ができているかチェック)
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+
+        # セキュリティコンテキスト
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+
+      # グレースフル終了期間
+      terminationGracePeriodSeconds: 30
