@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # MLflow Tracking Server
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.2
+    container_name: mlops-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+      - ./models:/mlflow/models
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri file:///mlflow/mlruns
+      --default-artifact-root file:///mlflow/models
+    networks:
+      - mlops-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Jupyter Lab for Interactive Exploration
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mlops-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/workspace/notebooks
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - ./pipeline:/workspace/pipeline
+      - ./mlruns:/workspace/mlruns
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    command: >
+      jupyter lab
+      --ip=0.0.0.0
+      --port=8888
+      --no-browser
+      --allow-root
+      --NotebookApp.token='mlops-demo'
+      --NotebookApp.password=''
+    networks:
+      - mlops-network
+    depends_on:
+      mlflow:
+        condition: service_healthy
+
+  # ML Pipeline Container
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mlops-pipeline
+    volumes:
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - ./metrics:/workspace/metrics
+      - ./pipeline:/workspace/pipeline
+      - ./mlruns:/workspace/mlruns
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - PYTHONUNBUFFERED=1
+    networks:
+      - mlops-network
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    # Keep container running for interactive commands
+    command: tail -f /dev/null
+
+networks:
+  mlops-network:
+    driver: bridge
+
+volumes:
+  mlruns:
+  models:
