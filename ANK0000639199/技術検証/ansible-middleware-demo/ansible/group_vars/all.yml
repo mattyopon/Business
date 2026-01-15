@@ -1,0 +1,60 @@
+---
+# =============================================================================
+# Global Variables - 全ホスト共通
+# =============================================================================
+
+# 環境設定
+environment: "{{ lookup('env', 'ENV') | default('dev') }}"
+
+# タイムゾーン
+timezone: Asia/Tokyo
+
+# NTPサーバー
+ntp_servers:
+  - ntp.nict.jp
+  - ntp1.jst.mfeed.ad.jp
+
+# 共通パッケージ
+common_packages:
+  - vim
+  - curl
+  - wget
+  - htop
+  - net-tools
+  - unzip
+  - jq
+  - git
+
+# sysctl パラメータ
+sysctl_params:
+  - { name: 'net.core.somaxconn', value: '65535' }
+  - { name: 'net.ipv4.tcp_max_syn_backlog', value: '65535' }
+  - { name: 'vm.swappiness', value: '10' }
+  - { name: 'fs.file-max', value: '2097152' }
+
+# セキュリティ設定
+security:
+  ssh_port: 22
+  ssh_allow_password: no
+  firewall_enabled: no  # AWS Security Groupで管理
+
+# =============================================================================
+# 監視設定
+# =============================================================================
+
+# Node Exporter
+node_exporter_version: "1.7.0"
+node_exporter_port: 9100
+node_exporter_listen_address: "0.0.0.0:{{ node_exporter_port }}"
+
+# Prometheus (外部)
+prometheus_server: "{{ lookup('env', 'PROMETHEUS_SERVER') | default('localhost:9090') }}"
+
+# =============================================================================
+# ログ設定
+# =============================================================================
+
+log_retention_days: 30
+log_paths:
+  - /var/log/syslog
+  - /var/log/auth.log

@@ -1,0 +1,65 @@
+---
+# =============================================================================
+# Common Role - 共通設定
+# =============================================================================
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install common packages
+  apt:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Configure sysctl parameters
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop: "{{ sysctl_params }}"
+
+- name: Set file limits
+  pam_limits:
+    domain: '*'
+    limit_type: "{{ item.type }}"
+    limit_item: nofile
+    value: "{{ item.value }}"
+  loop:
+    - { type: 'soft', value: '65535' }
+    - { type: 'hard', value: '65535' }
+
+- name: Ensure limits are applied
+  lineinfile:
+    path: /etc/pam.d/common-session
+    line: 'session required pam_limits.so'
+    state: present
+
+- name: Configure NTP
+  apt:
+    name: chrony
+    state: present
+
+- name: Configure chrony servers
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+  notify: Restart chrony
+
+- name: Ensure chrony is running
+  service:
+    name: chrony
+    state: started
+    enabled: yes
+
+- name: Configure logrotate for syslog
+  template:
+    src: logrotate-syslog.j2
+    dest: /etc/logrotate.d/rsyslog
+  notify: Reload logrotate
