@@ -1,6 +1,6 @@
 # 商談用資料
 
-GenSparkで作成したPowerPoint・画像ファイルを格納するディレクトリです。
+PowerPoint・画像ファイルを格納するディレクトリです。
 
 ## ファイル配置ガイド
 
@@ -14,7 +14,6 @@ GenSparkで作成したPowerPoint・画像ファイルを格納するディレ�
 
 ## 作成手順
 
-1. [GenSpark構成図プロンプト.md](../GenSpark構成図プロンプト.md) からプロンプトをコピー
-2. GenSparkに貼り付けて資料を生成
-3. ダウンロードしたファイルをこのディレクトリに配置
-4. `git add .` → `git commit` → `git push`
+1. 資料を作成
+2. ダウンロードしたファイルをこのディレクトリに配置
+3. `git add .` → `git commit` → `git push`
