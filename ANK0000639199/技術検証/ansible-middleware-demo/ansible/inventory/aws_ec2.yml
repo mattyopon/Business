@@ -1,0 +1,33 @@
+# =============================================================================
+# AWS EC2 Dynamic Inventory
+# =============================================================================
+# 使用方法: ansible-inventory -i inventory/aws_ec2.yml --list
+
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - ap-northeast-1
+
+# フィルタ条件
+filters:
+  tag:Project: ansible-demo
+  instance-state-name: running
+
+# タグに基づくグループ化
+keyed_groups:
+  - key: tags.Role
+    prefix: role
+    separator: "_"
+  - key: tags.Environment
+    prefix: env
+    separator: "_"
+
+# ホスト変数の設定
+compose:
+  ansible_host: public_ip_address | default(private_ip_address)
+  ansible_user: "'ubuntu'"
+
+# ホスト名の設定
+hostnames:
+  - tag:Name
+  - instance-id

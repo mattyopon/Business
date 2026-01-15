@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+# Upstream Configuration
+
+upstream {{ nginx_upstream_name }} {
+    least_conn;
+    keepalive 32;
+
+{% for server in nginx_upstream_servers %}
+    server {{ hostvars[server]['ansible_host'] | default(server) }}:{{ nginx_upstream_port }} max_fails=3 fail_timeout=30s;
+{% endfor %}
+}

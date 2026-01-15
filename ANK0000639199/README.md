@@ -10,7 +10,9 @@
 | [商談準備資料](商談用/商談準備資料.md) | 経歴紹介・質疑応答準備・チェックリスト |
 | [技術用語解説](商談用/技術用語解説.md) | 基礎的な技術用語の解説集 |
 | [想定Q&A](商談用/想定Q&A.md) | 技術的な深掘り質問への回答集 |
-| [ヒアリングシート](商談用/ヒアリングシート.md) | 商談時に確認すべき項目 |
+| [ヒアリングシート](商談用/ヒアリングシート.md) | 商談時の確認項目・医療AIユースケース |
+| [経営者向け価値説明](商談用/経営者向け価値説明.md) | 非技術者向けインフラエンジニアの価値説明 |
+| [GenSpark構成図プロンプト](商談用/GenSpark構成図プロンプト.md) | 構成図・資料作成用AIプロンプト集 |
 
 ### 参画用
 参画後に参照する設計・技術資料です。
@@ -42,6 +44,7 @@
 | 資料 | 説明 |
 |------|------|
 | [Terraform AWS Infrastructure](技術検証/terraform-aws-infra/) | IaCによるAWSインフラ構築デモ（EKS, Aurora, VPC） |
+| [Ansible Middleware Demo](技術検証/ansible-middleware-demo/) | Terraform + Ansibleによるミドルウェア構築デモ |
 | [MLOps Pipeline Demo](技術検証/mlops-pipeline-demo/) | MLOpsパイプラインのデモ実装 |
 | [SRE Monitoring Demo](技術検証/sre-monitoring-demo/) | Prometheus/Grafanaによる監視デモ |
 

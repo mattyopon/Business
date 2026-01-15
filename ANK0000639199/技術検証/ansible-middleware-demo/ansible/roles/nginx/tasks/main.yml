@@ -1,0 +1,93 @@
+---
+# =============================================================================
+# Nginx Role - Webサーバー設定
+# =============================================================================
+
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+
+- name: Create Nginx directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /etc/nginx/conf.d
+    - /etc/nginx/snippets
+    - /var/www/html
+
+- name: Copy main Nginx configuration
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Nginx
+
+- name: Copy default site configuration
+  template:
+    src: default.conf.j2
+    dest: /etc/nginx/sites-available/default
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Nginx
+
+- name: Enable default site
+  file:
+    src: /etc/nginx/sites-available/default
+    dest: /etc/nginx/sites-enabled/default
+    state: link
+  notify: Reload Nginx
+
+- name: Copy upstream configuration
+  template:
+    src: upstream.conf.j2
+    dest: /etc/nginx/conf.d/upstream.conf
+    owner: root
+    group: root
+    mode: '0644'
+  when: nginx_upstream_servers | length > 0
+  notify: Reload Nginx
+
+- name: Copy security snippets
+  template:
+    src: security.conf.j2
+    dest: /etc/nginx/snippets/security.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload Nginx
+
+- name: Create health check endpoint
+  copy:
+    content: "OK"
+    dest: /var/www/html/health
+    owner: www-data
+    group: www-data
+    mode: '0644'
+
+- name: Create default index page
+  template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+    owner: www-data
+    group: www-data
+    mode: '0644'
+
+- name: Test Nginx configuration
+  command: nginx -t
+  register: nginx_test
+  changed_when: false
+
+- name: Ensure Nginx is running
+  service:
+    name: nginx
+    state: started
+    enabled: yes

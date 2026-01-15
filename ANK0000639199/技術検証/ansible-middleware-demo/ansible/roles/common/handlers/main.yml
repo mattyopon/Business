@@ -1,0 +1,13 @@
+---
+# =============================================================================
+# Common Role - Handlers
+# =============================================================================
+
+- name: Restart chrony
+  service:
+    name: chrony
+    state: restarted
+
+- name: Reload logrotate
+  command: logrotate -f /etc/logrotate.conf
+  changed_when: false

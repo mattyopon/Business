@@ -1,0 +1,46 @@
+---
+# =============================================================================
+# Web Servers Variables
+# =============================================================================
+
+# Nginx 基本設定
+nginx_user: www-data
+nginx_worker_processes: auto
+nginx_worker_connections: 4096
+nginx_keepalive_timeout: 65
+nginx_client_max_body_size: 100M
+
+# サーバー設定
+nginx_server_name: "{{ inventory_hostname }}"
+nginx_root: /var/www/html
+nginx_index: index.html index.htm
+
+# アップストリーム設定（アプリサーバー）
+nginx_upstream_name: app_backend
+nginx_upstream_servers: "{{ groups['appservers'] | default([]) }}"
+nginx_upstream_port: 8000
+
+# SSL設定（本番用）
+nginx_ssl_enabled: false
+nginx_ssl_certificate: ""
+nginx_ssl_certificate_key: ""
+
+# プロキシ設定
+nginx_proxy_connect_timeout: 60
+nginx_proxy_send_timeout: 60
+nginx_proxy_read_timeout: 60
+
+# ロギング
+nginx_access_log: /var/log/nginx/access.log
+nginx_error_log: /var/log/nginx/error.log
+nginx_log_format: |
+  '$remote_addr - $remote_user [$time_local] "$request" '
+  '$status $body_bytes_sent "$http_referer" '
+  '"$http_user_agent" "$http_x_forwarded_for" '
+  'rt=$request_time uct="$upstream_connect_time" uht="$upstream_header_time" urt="$upstream_response_time"'
+
+# セキュリティヘッダー
+nginx_security_headers:
+  X-Frame-Options: "SAMEORIGIN"
+  X-Content-Type-Options: "nosniff"
+  X-XSS-Protection: "1; mode=block"
