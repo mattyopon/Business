@@ -1,73 +1,20 @@
-# Business - 案件・デモプロジェクト管理リポジトリ
+# Business - デモプロジェクト管理リポジトリ
 
 ## 概要
 
-技術面接・ポートフォリオ用の案件情報とデモプロジェクトを管理するリポジトリです。
+技術面接・ポートフォリオ用のデモプロジェクトを管理するリポジトリです。
 
 ## 構成
 
 ```
 Business/
-├── case-b-old/          # (顧客B) 案件情報
-├── case-a-old/             # (顧客A) 案件情報
+├── project-a/             # 案件A準備資料
+├── project-b/             # 案件B準備資料
 └── demo-projects/         # 技術デモプロジェクト
     ├── k8s-github-actions-demo/     # Day 1: Kubernetes + GitHub Actions CI/CD
     ├── mlops-pipeline-demo/         # Day 2: MLOps パイプライン
     └── sre-monitoring-demo/         # Day 3: SRE 監視基盤
 ```
-
----
-
-## 案件情報
-
-### 1. (顧客B)
-
-- **プロジェクト**: スマートシティ向けAIアプリケーション開発
-- **URL**: (redacted-url)
-- **契約形態**: 派遣契約
-- **給与**: 〜6,300円/時（税込）
-- **期間**: 2026-02-01 〜 長期予定
-- **場所**: (都内)
-
-**必要スキル**:
-- バックエンドソフトウェア開発経験
-- IaC (Infrastructure as Code) の経験
-- ビジネスレベルの日本語能力
-
-**作業内容**:
-- Kubernetesを用いたインフラの開発、保守
-- データ処理パイプラインの開発、保守
-- GitHub Actionsを用いたCI/CDパイプラインの開発、保守
-
-📁 詳細: [case-b-old/README.md](./case-b-old/README.md)
-
----
-
-### 2. (顧客A)
-
-- **プロジェクト**: 医療業界向けクラウドインフラ構築
-- **URL**: (redacted-url)
-- **契約形態**: 業務委託
-- **単価**: 60〜90万円/月（税込）
-- **期間**: 即日 〜 延長の可能性あり
-- **場所**: (都内)
-- **募集人員**: 3名
-
-**必要スキル**:
-- AWSでのクラウドインフラ構築や運用経験(5年以上)
-- MLOps構築や運用経験
-- IaCの知見や運用経験
-- コンテナ技術の知見や運用経験
-- SREに関する知見
-
-**作業内容**:
-- AWSを中心としたクラウドインフラの設計、構築、運用、保守
-- AIモデル運用のためのMLOpsパイプライン構築、改善
-- IaC(Terraform、CloudFormationなど)による環境構築の自動化
-- コンテナ(Docker、ECS、EKS)ベースの運用管理
-- 監視、ログ設計、アラート基盤などのSRE活動
-
-📁 詳細: [case-a-old/README.md](./case-a-old/README.md)
 
 ---
 
@@ -84,8 +31,6 @@ Business/
 - GitHub Actionsによる自動CI/CDパイプライン
 - ローカルMinikube環境での動作確認
 
-**関連案件**: (顧客B)（Kubernetes、GitHub Actions CI/CD）
-
 📁 プロジェクト: [demo-projects/k8s-github-actions-demo](./demo-projects/k8s-github-actions-demo)
 
 ---
@@ -99,8 +44,6 @@ Business/
 - 機械学習パイプライン（前処理・訓練・評価）
 - Jupyter Notebookによるデータ探索
 - Docker Composeによるマイクロサービス構成
-
-**関連案件**: (顧客A)（MLOps、AWS、Docker）
 
 📁 プロジェクト: [demo-projects/mlops-pipeline-demo](./demo-projects/mlops-pipeline-demo)
 
@@ -122,8 +65,6 @@ Business/
 - システムメトリクス監視（CPU、メモリ、ディスク）
 - アプリケーションメトリクス（リクエスト率、エラー率、レイテンシ）
 - アラートルール設定
-
-**関連案件**: (顧客A)（SRE、監視基盤、AWS）
 
 📁 プロジェクト: [demo-projects/sre-monitoring-demo](./demo-projects/sre-monitoring-demo)
 
@@ -170,25 +111,6 @@ docker-compose up -d
 | **IaC** | Docker Compose, K8s Manifests | Day 1, Day 2, Day 3 |
 | **言語** | Python, Bash | Day 2, Day 3 |
 | **SRE** | メトリクス収集、アラート | Day 3 |
-
----
-
-## 面接でのアピールポイント
-
-### (顧客B)向け
-
-✅ **Kubernetes経験** - Day 1で実践的なデプロイメントを実装
-✅ **GitHub Actions CI/CD** - Day 1で自動化パイプラインを構築
-✅ **データパイプライン** - Day 2でMLパイプラインを実装
-✅ **IaC経験** - すべてのプロジェクトでInfrastructure as Code
-
-### (顧客A)向け
-
-✅ **AWS経験** - ローカルで再現可能な構成（AWS移行可能）
-✅ **MLOps構築** - Day 2で完全なMLOpsパイプラインを実装
-✅ **コンテナ技術** - Docker/Docker Composeの実践的活用
-✅ **SRE知見** - Day 3で監視基盤とアラート設定を実装
-✅ **IaC** - Terraform代替としてDocker Composeで環境自動化
 
 ---
 
