@@ -52,3 +52,6 @@ yarn-error.log
 *.tmp
 *.bak
 *.cache
+
+# 公開用プロンプト（外部共有のため除外）
+ANK0000639199/商談用/GenSpark構成図プロンプト.md
