@@ -1,6 +1,6 @@
 # Kubernetes + GitHub Actions Demo
 
-(顧客B)案件向けのKubernetes + CI/CDデモプロジェクトです。
+インフラ開発案件向けのKubernetes + CI/CDデモプロジェクトです。
 
 ## 概要
 
