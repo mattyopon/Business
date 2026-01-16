@@ -53,5 +53,6 @@ yarn-error.log
 *.bak
 *.cache
 
-# 公開用プロンプト（外部共有のため除外）
+# 内部作業用プロンプト（gitに含めない）
 ANK0000639199/商談用/GenSpark構成図プロンプト.md
+ANK0000640318/商談用/資料/GenSpark_プロンプト.md
