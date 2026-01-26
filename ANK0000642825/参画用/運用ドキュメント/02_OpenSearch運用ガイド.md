@@ -1,0 +1,275 @@
+# OpenSearch運用ガイド
+
+## 1. 概要
+
+### 1.1 目的
+本ドキュメントは、Amazon OpenSearch Serviceの運用手順を定義する。
+
+### 1.2 クラスター構成
+
+| 項目 | 本番環境 | 開発環境 |
+|------|---------|---------|
+| ドメイン名 | search-prod | search-dev |
+| エンジンバージョン | OpenSearch 2.11 | OpenSearch 2.11 |
+| インスタンスタイプ | r6g.large.search | t3.medium.search |
+| インスタンス数 | 3 | 1 |
+| EBSボリューム | 500GB gp3 | 100GB gp3 |
+
+---
+
+## 2. 接続方法
+
+### 2.1 エンドポイント確認
+
+```bash
+aws opensearch describe-domain --domain-name search-prod \
+  --query 'DomainStatus.Endpoint' --output text
+```
+
+### 2.2 curlでのアクセス（IAM認証）
+
+```bash
+# AWS SigV4署名を使用
+aws opensearch-serverless get-access-policy ...
+
+# または aws-requests-auth を使用したPython
+```
+
+### 2.3 OpenSearch Dashboards
+
+- URL: `https://<endpoint>/_dashboards`
+- 認証: Cognito User Pool
+
+---
+
+## 3. インデックス管理
+
+### 3.1 インデックス一覧確認
+
+```bash
+curl -XGET "https://<endpoint>/_cat/indices?v"
+```
+
+### 3.2 インデックス作成
+
+```json
+PUT /products
+{
+  "settings": {
+    "number_of_shards": 3,
+    "number_of_replicas": 1
+  },
+  "mappings": {
+    "properties": {
+      "name": { "type": "text" },
+      "category": { "type": "keyword" }
+    }
+  }
+}
+```
+
+### 3.3 インデックス削除
+
+```bash
+curl -XDELETE "https://<endpoint>/products"
+```
+
+### 3.4 インデックスライフサイクル管理（ISM）
+
+```json
+PUT /_plugins/_ism/policies/delete_old_logs
+{
+  "policy": {
+    "description": "Delete old log indices",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [],
+        "transitions": [
+          {
+            "state_name": "delete",
+            "conditions": {
+              "min_index_age": "30d"
+            }
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [
+          { "delete": {} }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 4. クラスター監視
+
+### 4.1 クラスターヘルス確認
+
+```bash
+# クラスター状態
+curl -XGET "https://<endpoint>/_cluster/health?pretty"
+
+# ノード状態
+curl -XGET "https://<endpoint>/_nodes/stats?pretty"
+
+# シャード状態
+curl -XGET "https://<endpoint>/_cat/shards?v"
+```
+
+### 4.2 主要メトリクス
+
+| メトリクス | 正常値 | 警告値 |
+|-----------|--------|--------|
+| ClusterStatus | green | yellow |
+| CPUUtilization | < 80% | > 80% |
+| JVMMemoryPressure | < 80% | > 80% |
+| FreeStorageSpace | > 20% | < 20% |
+| SearchLatency | < 100ms | > 500ms |
+
+### 4.3 CloudWatchアラーム設定
+
+```yaml
+# Terraform例
+resource "aws_cloudwatch_metric_alarm" "opensearch_cpu" {
+  alarm_name          = "opensearch-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ES"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "OpenSearch CPU usage is high"
+  dimensions = {
+    DomainName = "search-prod"
+  }
+}
+```
+
+---
+
+## 5. パフォーマンスチューニング
+
+### 5.1 スローログ設定
+
+```json
+PUT /products/_settings
+{
+  "index.search.slowlog.threshold.query.warn": "10s",
+  "index.search.slowlog.threshold.query.info": "5s",
+  "index.search.slowlog.threshold.fetch.warn": "1s",
+  "index.indexing.slowlog.threshold.index.warn": "10s"
+}
+```
+
+### 5.2 シャード設計
+
+| データ量 | シャード数（推奨） |
+|---------|------------------|
+| 〜10GB | 1 |
+| 10GB〜50GB | 3 |
+| 50GB〜100GB | 5 |
+| 100GB以上 | データ量/50GB |
+
+### 5.3 クエリ最適化
+
+**避けるべきパターン**:
+- `match_all` + ソート（ページング用）
+- `wildcard` クエリの先頭ワイルドカード
+- 大量のOR条件
+
+**推奨パターン**:
+- `search_after` によるディープページング
+- `filter` コンテキストでのキャッシュ活用
+- `keyword` 型でのexact match
+
+---
+
+## 6. バックアップ・リストア
+
+### 6.1 自動スナップショット
+
+Amazon OpenSearch Serviceは1時間ごとに自動スナップショットを取得（14日保持）。
+
+### 6.2 手動スナップショット
+
+```bash
+# スナップショットリポジトリ登録
+PUT /_snapshot/my-repo
+{
+  "type": "s3",
+  "settings": {
+    "bucket": "my-snapshot-bucket",
+    "region": "ap-northeast-1",
+    "role_arn": "arn:aws:iam::123456789012:role/opensearch-snapshot-role"
+  }
+}
+
+# スナップショット作成
+PUT /_snapshot/my-repo/snapshot-1
+
+# スナップショット確認
+GET /_snapshot/my-repo/_all
+```
+
+### 6.3 リストア
+
+```bash
+# インデックスリストア
+POST /_snapshot/my-repo/snapshot-1/_restore
+{
+  "indices": "products",
+  "rename_pattern": "(.+)",
+  "rename_replacement": "restored_$1"
+}
+```
+
+---
+
+## 7. トラブルシューティング
+
+### 7.1 クラスターステータスがyellow
+
+**原因**: レプリカシャードが割り当てられていない
+
+**対処**:
+```bash
+# 未割り当てシャード確認
+curl -XGET "https://<endpoint>/_cat/shards?v&h=index,shard,prirep,state,unassigned.reason"
+
+# クラスター再割り当て
+POST /_cluster/reroute?retry_failed=true
+```
+
+### 7.2 JVMメモリプレッシャーが高い
+
+**原因**: ヒープメモリ不足
+
+**対処**:
+- インスタンスタイプをアップグレード
+- 不要なインデックスを削除
+- シャード数を削減
+
+### 7.3 検索レイテンシが高い
+
+**原因**: クエリ非効率、リソース不足
+
+**対処**:
+- スローログでボトルネック特定
+- クエリ最適化
+- キャッシュ活用
+
+---
+
+## 8. 変更履歴
+
+| 日付 | バージョン | 変更内容 | 担当者 |
+|------|-----------|---------|--------|
+| 2026-01-XX | 1.0 | 初版作成 | - |
