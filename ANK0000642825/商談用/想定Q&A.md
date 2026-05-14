@@ -113,9 +113,9 @@
 - ステージ管理 (dev/stg/prod) と Stage Variables / Usage Plan の運用設計
 - スロットリング (RPS/Burst) と AWS WAF / CloudFront との層別防御
 
-**実施済み検証**:
-- 本リポジトリ `技術検証/terraform-aws-search/` で API Gateway + Cognito Authorizer + Lambda Proxy + Cognito User Pool の構成を Terraform で IaC 化済み (`main.tf` 内 `aws_api_gateway_*` / `aws_cognito_user_pool*`)
-- `参画用/運用ドキュメント/03_API-Gateway設計書.md` で本案件向けの API 設計 / スロットリング / 認可 / ロギングを文書化
+**実施済み検証 (本リポ同梱の Terraform で確認した範囲)**:
+- `技術検証/terraform-aws-search/main.tf` に **REST API + リソース 1本 (`/search` GET) + Cognito Authorizer + Cognito User Pool / App Client** を IaC 化。**Lambda 統合 / API ステージ・デプロイ / Usage Plan / OAuth スコープ強制 / WAF / Hosted UI は本デモには未実装** で、本デモは「認可フローと Terraform 構造を確認するための最小サンプル」の位置付け
+- `参画用/運用ドキュメント/03_API-Gateway設計書.md` で本案件向けの API 設計 / スロットリング / 認可 / ロギングを文書化 (実装は本案件で並走実施)
 
 **前職での直接実装の経験範囲**:
 - 大規模商用 API の運用は New Relic / CloudWatch 監視と障害対応が中心。新規 API Gateway の0→1構築は本案件と同等規模では未経験のため、初期スプリントはチームリードと並走しながら設計判断をコミットする想定です。
@@ -130,8 +130,9 @@
 - MFA (SMS / TOTP) 設定、管理者ロール強制、リスクベース認証
 - 認証フロー (USER_SRP_AUTH / REFRESH_TOKEN_AUTH) の使い分け、Client Secret の有効/無効の判断
 
-**実施済み検証**:
-- 本リポジトリ `技術検証/terraform-aws-search/` で User Pool + App Client + Authorizer を IaC 化 (password policy 12文字以上 / MFA OPTIONAL / OAuth スコープ設計)
+**実施済み検証 (本リポ同梱の Terraform で確認した範囲)**:
+- `技術検証/terraform-aws-search/main.tf` で User Pool (password policy 12文字以上 / MFA OPTIONAL / アカウント復旧 verified_email) + App Client (SRP / Refresh Token 認証フロー) + API Gateway Authorizer の最小構成を IaC 化
+- **Hosted UI / Identity Pool / Cognito Groups / OAuth スコープ強制 / カスタムリソースサーバ / Triggers (Lambda hook) は本デモには未実装**。本デモは「ユーザープールと Authorizer の Terraform 構造確認」の最小サンプルです
 - IAM Identity Center 経由の運用者認証は前職にて本番運用経験あり
 
 **前職での直接実装の経験範囲**:
@@ -186,9 +187,9 @@
 - スロークエリ調査と最適化 (`SearchLatency` p95, slow log threshold 設定)
 - 監査ログ / SigV4 認証 / FGAC / KMS 暗号化など Managed OpenSearch 固有の運用ポイント
 
-**実施済み検証**:
-- 本リポジトリ `技術検証/opensearch-demo/` で kuromoji analyzer / completion suggester / aggregations を含むマッピング設計と検証クエリを実装・動作確認
-- `技術検証/terraform-aws-search/` で Managed Domain (VPC内 / FGAC / KMS 暗号化 / TLS 1.2 enforce / Slow Log 取込) の IaC を作成
+**実施済み検証 (本リポ同梱の範囲)**:
+- `技術検証/opensearch-demo/README.md` に kuromoji analyzer / completion suggester (mapping 修正済) / aggregations / bool query を含む**マッピング設計とクエリ DSL のスニペット集**を整備。実機実行は本案件参画時に並走
+- `技術検証/terraform-aws-search/main.tf` で Managed Domain (VPC内 / FGAC enabled / KMS CMK 暗号化 / TLS 1.2 enforce / Slow Log 3種類取込) の **最小構成**を実装。マルチノード dedicated master / Hot-Warm tier / Snapshot Lifecycle / Index State Management は本デモのスコープ外
 - `参画用/運用ドキュメント/02_OpenSearch運用ガイド.md` で SigV4 (awscurl / curl --aws-sigv4 / opensearch-py + AWS4Auth) を含む運用手順を文書化
 
 **前職での直接実装の経験範囲**:

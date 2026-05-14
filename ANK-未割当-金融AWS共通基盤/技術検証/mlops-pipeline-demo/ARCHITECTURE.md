@@ -67,7 +67,7 @@
 
 **Access**:
 - URL: http://localhost:8888
-- Token: `mlops-demo`
+- Token: `${JUPYTER_TOKEN}` (`.env` で必ず生成して設定: `openssl rand -hex 24`)
 
 ### 3. Pipeline Container
 

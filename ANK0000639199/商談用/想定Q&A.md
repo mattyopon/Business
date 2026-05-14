@@ -6,9 +6,9 @@
 
 ### Q1-1: HIPAAコンプライアンスはどのように確保していますか？
 
-**A**: HIPAAコンプライアンスは以下のように確保しています：
+**A**: HIPAA コンプライアンスは以下の方針で**設計時に**満たすことを目指します。HIPAA 適合性は AWS 単独では成立せず、顧客側統制 (運用 / 教育 / 契約 / 物理) を含む共同責任モデルである点を前提に、自社・クライアント双方の役割を明示します。
 
-1. **AWS HIPAA Eligible Services**: HIPAA Eligible Servicesのみを使用し、AWS Business Associate Agreement (BAA) を締結しています。
+1. **AWS HIPAA Eligible Services の限定使用**: PHI を扱う構成では AWS HIPAA Eligible Services リストにあるサービスのみを採用します。**AWS Business Associate Addendum (BAA) は AWS Artifact から承認手続きが必要**で、本案件のクライアント側で BAA 締結状況を確認のうえ、未締結であれば参画初期の課題として優先対応します (`参画用/運用ドキュメント/06_セキュリティガバナンス.md` 「規制対応マップ」で HIPAA を「条件付き」として扱っているのと整合します)。
 
 2. **データ暗号化**: 
    - 転送時: TLS 1.3を使用したHTTPS通信、AWS PrivateLinkによるプライベート接続

@@ -4,11 +4,14 @@ FROM node:18-alpine
 # 作業ディレクトリを設定
 WORKDIR /app
 
-# package.jsonとpackage-lock.jsonをコピー
+# package.json と (もし存在すれば) package-lock.json をコピー
+# 本雛形には lockfile を同梱していない。実プロジェクトでは `npm ci` 利用を推奨する。
 COPY package*.json ./
 
-# 依存関係をインストール
-RUN npm ci --only=production
+# 雛形のため npm install を使用 (lockfile 非依存)。
+# 実プロジェクトでは package-lock.json を生成 (npm install したあと commit) し、
+# 下記行を `RUN npm ci --omit=dev` に置き換えること。
+RUN npm install --omit=dev --no-audit --no-fund
 
 # アプリケーションのソースコードをコピー
 COPY . .

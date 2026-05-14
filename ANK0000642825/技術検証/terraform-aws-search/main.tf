@@ -150,6 +150,12 @@ resource "aws_cloudwatch_log_group" "opensearch" {
 # -----------------------------------------------------------------------------
 # IAM Role for OpenSearch Master User
 # -----------------------------------------------------------------------------
+data "aws_caller_identity" "current" {}
+
+# OpenSearch FGAC master_user として使う IAM Role
+# 重要: Trust に `es.amazonaws.com` だけを書くと、運用者 / Lambda どちらも AssumeRole できず管理不能になる。
+# 実運用では IAM Identity Center 経由の運用ロール ARN と、検索 / 投入用 Lambda 実行ロール ARN を Principal.AWS に列挙する。
+# 本デモでは「同一アカウント内の任意の IAM プリンシパル」を `aws:PrincipalAccount` 条件で許容し、外部からの AssumeRole を防ぐ最小構成にしている。
 resource "aws_iam_role" "opensearch_master" {
   name = "${var.project_name}-opensearch-master"
 
@@ -157,10 +163,16 @@ resource "aws_iam_role" "opensearch_master" {
     Version = "2012-10-17"
     Statement = [
       {
-        Action = "sts:AssumeRole"
+        Sid    = "AllowAccountPrincipalsToAssume"
         Effect = "Allow"
+        Action = "sts:AssumeRole"
         Principal = {
-          Service = "es.amazonaws.com"
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Condition = {
+          StringEquals = {
+            "aws:PrincipalAccount" = data.aws_caller_identity.current.account_id
+          }
         }
       }
     ]

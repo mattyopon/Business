@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: payment-api-config
-  namespace: payment
+  namespace: payment-platform
 data:
   # アプリケーション一般設定
   APP_ENV: "staging"
@@ -33,7 +33,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: payment-api-secret
-  namespace: payment
+  namespace: payment-platform
 type: Opaque
 stringData:
   # 雛形プレースホルダ。実運用では Secret Manager / External Secrets Operator から注入し、

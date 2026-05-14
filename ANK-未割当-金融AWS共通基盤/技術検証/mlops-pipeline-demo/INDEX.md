@@ -248,7 +248,7 @@ mlops-pipeline-demo/
 
 ### Services (when running)
 - **MLflow UI**: http://localhost:5000
-- **Jupyter Lab**: http://localhost:8888 (token: mlops-demo)
+- **Jupyter Lab**: http://localhost:8888 (token: ${JUPYTER_TOKEN} (.env で設定))
 
 ### Key Commands
 ```bash

@@ -34,47 +34,32 @@ Terraform でインフラを構築し、Ansible でミドルウェアを設定�
 
 ---
 
-## ディレクトリ構成
+## ディレクトリ構成 (本リポ同梱の実体)
 
 ```
 ansible-middleware-demo/
 ├── README.md
-├── terraform/                    # インフラ構築
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── environments/
-│       ├── dev.tfvars
-│       └── prod.tfvars
+├── terraform/                    # インフラ構築 (本デモは雛形のため最小限)
+│   └── (案件に応じて main.tf / variables.tf / outputs.tf / environments/ を追加)
 │
 ├── ansible/                      # ミドルウェア設定
 │   ├── ansible.cfg
 │   ├── inventory/
-│   │   ├── hosts.yml             # 静的インベントリ
-│   │   └── aws_ec2.yml           # 動的インベントリ（AWS）
+│   │   └── aws_ec2.yml           # 動的インベントリ (AWS) — 同梱
+│   │   # ※ hosts.yml (静的インベントリ) は同梱しない。必要なら案件側で追加
 │   │
-│   ├── playbooks/
-│   │   ├── site.yml              # メインプレイブック
-│   │   ├── webserver.yml         # Webサーバー設定
-│   │   ├── docker.yml            # Docker設定
-│   │   └── monitoring.yml        # 監視エージェント設定
+│   ├── playbooks/                # site.yml / webserver.yml / docker.yml 等 (案件で必要な分を追加)
 │   │
-│   ├── roles/
-│   │   ├── common/               # 共通設定
-│   │   ├── nginx/                # Nginx設定
-│   │   ├── docker/               # Docker設定
-│   │   ├── node_exporter/        # Prometheus Node Exporter
-│   │   └── fluentd/              # ログ収集
+│   ├── roles/                    # 同梱: common / nginx / docker / node_exporter
+│   │   # ※ fluentd / monitoring 系の role は同梱しない (実プロジェクトで Fluent Bit + DaemonSet 構成を推奨)
 │   │
-│   └── group_vars/
-│       ├── all.yml
-│       ├── webservers.yml
-│       └── appservers.yml
+│   └── group_vars/               # all.yml / webservers.yml / appservers.yml (案件側で値を埋める)
 │
-└── scripts/
-    ├── deploy.sh                 # 統合デプロイスクリプト
-    └── destroy.sh                # クリーンアップ
+└── scripts/                      # deploy.sh / destroy.sh は案件側で必要に応じて作成
 ```
+
+> **本デモのスコープ**: Terraform + Ansible 併用パターンの**構造の参考**として、ansible/inventory + ansible/roles の基本骨格を同梱しています。
+> 完全動作する deploy.sh / Terraform / fluentd role 一式は同梱外で、案件参画時に必要な部分のみ拡張する想定です。
 
 ---
 

@@ -52,7 +52,7 @@ docker-compose up -d
 
 This will start:
 - **MLflow Server**: http://localhost:5000 (Experiment tracking UI)
-- **Jupyter Lab**: http://localhost:8888 (Token: `mlops-demo`)
+- **Jupyter Lab**: http://localhost:8888 (Token: `${JUPYTER_TOKEN}` (.env で生成: `openssl rand -hex 24`))
 - **Pipeline Container**: Runs training and evaluation
 
 ### 3. Run the Complete Pipeline

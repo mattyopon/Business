@@ -42,7 +42,7 @@ Client (Web/Mobile)
 ### 3.2 共通仕様
 
 - HTTPS 必須 (TLS 1.2 以上)
-- Authorization ヘッダに ID Token (JWT) を `Bearer <token>` で付与
+- Authorization ヘッダに **Cognito Access Token** (JWT) を `Bearer <token>` で付与する。**API Gateway の OAuth スコープ判定 (`OAuth Scopes`) は Access Token の `scope` claim を見るため、ID Token は使わない**。エンドユーザーの属性 (氏名・email) が必要な場合は Lambda 側で Access Token を検証しつつ、別途 ID Token を 2つ目のヘッダ (`X-Id-Token`) で受け取り検証する設計とする
 - `Content-Type: application/json; charset=utf-8`
 - レスポンスは `application/json`。タイムスタンプは ISO 8601 (UTC)
 - リクエスト ID: API Gateway で `$context.requestId` を付与し、レスポンスヘッダ `X-Request-Id` で返却
@@ -125,7 +125,7 @@ Client (Web/Mobile)
 - AWS WAF を CloudFront または API Gateway に関連付け (SQLi / XSS / Rate-based / Bot Control)
 - API Key は内部システム連携のみで使用 (顧客向け公開エンドポイントには付与しない)
 - VPC Endpoint (`execute-api`) でプライベートAPI化する場合は別ステージで `PRIVATE` 構成
-- CloudTrail Data Events で API Gateway / Cognito の管理操作を記録
+- CloudTrail **Management Events** で API Gateway / Cognito の**管理操作** (CreateRestApi / UpdateAuthorizer / AdminUpdateUserAttributes 等) を記録。Data Events は API Gateway 経由の個別 API 呼び出しを記録したい場合のオプション (コスト増大に注意)
 
 ## 8. 障害時のフェイルセーフ
 
