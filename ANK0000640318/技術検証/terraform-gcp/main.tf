@@ -20,10 +20,11 @@ resource "google_compute_subnetwork" "public" {
   project       = var.project_id
 }
 
-# Private Subnet
+# Private Subnet (GKE ノード用)
+# 設計書 01_インフラ設計書.md 「2.2 サブネット設計」と整合: gke-subnet 10.0.0.0/20
 resource "google_compute_subnetwork" "private" {
-  name          = "${var.project_name}-private-subnet"
-  ip_cidr_range = "10.0.10.0/24"
+  name          = "${var.project_name}-gke-subnet"
+  ip_cidr_range = "10.0.0.0/20"
   region        = var.region
   network       = google_compute_network.main.id
   project       = var.project_id
@@ -103,22 +104,44 @@ resource "google_container_cluster" "main" {
 
 # ----------------------------------------------
 # Cloud SQL (PostgreSQL)
+# 設計書 01_インフラ設計書.md 7.3 「バックアップ戦略」と整合させ、30日保持に設定する。
+# private_network に VPC を直接指定するため、事前に Private Service Access (Service Networking) を確立する必要がある。
 # ----------------------------------------------
+resource "google_compute_global_address" "private_service_access" {
+  name          = "${var.project_name}-psa"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 16
+  network       = google_compute_network.main.id
+  project       = var.project_id
+}
+
+resource "google_service_networking_connection" "private_vpc_connection" {
+  network                 = google_compute_network.main.id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_service_access.name]
+}
+
 resource "google_sql_database_instance" "main" {
   name             = "${var.project_name}-db"
   database_version = "POSTGRES_15"
   region           = var.region
   project          = var.project_id
 
+  depends_on = [google_service_networking_connection.private_vpc_connection]
+
   settings {
-    tier              = "db-custom-2-4096"
-    availability_type = "REGIONAL"  # 高可用性
+    tier              = "db-custom-4-16384"   # 設計書 5.1 と整合 (4 vCPU / 16GB RAM)
+    availability_type = "REGIONAL"            # 高可用性
 
     backup_configuration {
       enabled                        = true
       point_in_time_recovery_enabled = true
       start_time                     = "03:00"
       location                       = var.region
+      backup_retention_settings {
+        retained_backups = 30   # 設計書 7.3 と整合 (30日保持)
+      }
     }
 
     ip_configuration {
@@ -239,7 +262,7 @@ resource "google_spanner_instance" "main" {
   name             = "${var.project_name}-spanner"
   display_name     = "${var.project_name}-spanner"
   config           = "regional-${var.region}"
-  processing_units = 1000  # 1 node 相当
+  processing_units = 3000  # 3 node 相当 (設計書 5.2 と整合: ノード数 3)
   project          = var.project_id
 
   labels = {

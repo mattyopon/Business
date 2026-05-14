@@ -387,20 +387,22 @@ jobs:
 
 ```yaml
 # argocd/applications/payment-api.yaml
+# 重要: source.repoURL は CD ワークフロー (3.2 / 3.3) が tag を書き換える先 (= manifest repo) と一致させる。
+# 本案件では payment/payment-manifests を採用する。
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: payment-api
+  name: payment-prod
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/example/payment-platform
+    repoURL: https://github.com/payment/payment-manifests
     targetRevision: HEAD
-    path: k8s/overlays/production
+    path: overlays/production
   destination:
     server: https://kubernetes.default.svc
-    namespace: production
+    namespace: payment-platform
   syncPolicy:
     automated:
       prune: true
@@ -414,6 +416,8 @@ spec:
         factor: 2
         maxDuration: 3m
 ```
+
+> 同じパターンで `payment-staging` (`overlays/staging`) と `payment-prod-canary` (`overlays/production-canary`) の Application を作成する。CD ワークフロー内の `ARGOCD_APP` / `ARGOCD_APP_CANARY` / `ARGOCD_APP_PROD` 環境変数と app 名を必ず揃える。
 
 ### 4.2 Sync戦略
 
@@ -436,33 +440,37 @@ spec:
 | レイテンシ | P99 > 500ms | アラート |
 | Pod再起動 | > 3回/5分 | 自動ロールバック |
 
-### 5.2 手動ロールバック手順
+### 5.2 手動ロールバック手順 (GitOps 一本化、`kubectl` での直接巻き戻しはしない)
+
+GitOps 方針上、`kubectl rollout undo` は使わない。**ArgoCD の selfHeal が動いている環境では `kubectl rollout undo` を打っても直後に元状態へ戻されてしまう**ため、ロールバックは必ず **manifest repo の Git revert** で行う:
 
 ```bash
-# 1. 現在のリビジョン確認
-kubectl rollout history deployment/payment-api -n production
+# 1. manifest repo を checkout
+git clone https://github.com/payment/payment-manifests
+cd payment-manifests
 
-# 2. 前のリビジョンにロールバック
-kubectl rollout undo deployment/payment-api -n production
+# 2. 直前のリリースコミットを確認
+git log --oneline overlays/production/ | head -10
 
-# 3. 特定リビジョンにロールバック
-kubectl rollout undo deployment/payment-api -n production --to-revision=3
+# 3. 直前の正常な image tag に戻す (overlays/production/kustomization.yaml の image bump を revert)
+git revert <commit-sha-of-bad-rollout> --no-edit
+git push
 
-# 4. ロールバック状況確認
-kubectl rollout status deployment/payment-api -n production
+# 4. ArgoCD sync で前バージョンが反映されるのを待つ
+argocd app sync payment-prod
+argocd app wait payment-prod --health --operation --timeout 600
 ```
 
-### 5.3 ArgoCD経由でのロールバック
+### 5.3 ArgoCD 履歴経由での緊急ロールバック (manifest revert より速く戻したいとき)
 
 ```bash
 # 1. 履歴確認
-argocd app history payment-api
+argocd app history payment-prod
 
-# 2. 特定リビジョンに戻す
-argocd app rollback payment-api <REVISION>
+# 2. 直前の synced revision に巻き戻す
+argocd app rollback payment-prod <REVISION>
 
-# 3. Sync
-argocd app sync payment-api
+# ※ この方法は manifest repo と一時的にドリフトするため、必ず後で manifest repo 側を git revert で揃え、selfHeal で再drift しないようにする
 ```
 
 ---

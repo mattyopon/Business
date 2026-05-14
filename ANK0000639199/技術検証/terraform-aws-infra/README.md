@@ -6,37 +6,32 @@
 
 本デモは、医療系AIプロダクトの本番環境を想定したAWSインフラをTerraformで構築します。
 
-### 構築するリソース
+### 構築するリソース (本リポ同梱の実装範囲)
 
-- **ネットワーク**: VPC、サブネット（パブリック/プライベート）、NAT Gateway
-- **コンピューティング**: EKS クラスター、Fargate プロファイル
-- **データベース**: Aurora MySQL（マルチAZ）
-- **ストレージ**: S3（モデル保存用）、EFS（共有ストレージ）
-- **セキュリティ**: WAF、セキュリティグループ、IAMロール
-- **監視**: CloudWatch、SNS アラート
+- **ネットワーク**: VPC、サブネット（パブリック/プライベート）、NAT Gateway (`modules/vpc/`)
+- **コンピューティング**: EKS クラスター、Fargate プロファイル (`modules/eks/`)
+- **データベース**: Aurora MySQL (マルチAZ) (`modules/aurora/`)
 
-## ディレクトリ構成
+### 同梱外 (案件参画時に追加実装)
+
+- **ストレージ**: S3 (モデル保存) / EFS (共有ストレージ) — モジュール未同梱
+- **セキュリティ**: WAF / 追加のセキュリティグループ / 追加 IAM ロール (Web ACL の関連付けや FGAC 設計は本リポ外)
+- **監視**: CloudWatch アラーム / SNS Topic — モジュール未同梱
+- **prod 環境**: `environments/dev/` のみ同梱 (prod はテンプレ流用で派生する想定)
+- **アーキテクチャドキュメント (`docs/architecture.md`)**: 未同梱 (参画用 `01_AWSインフラ設計書.md` を一次資料とする)
+
+## ディレクトリ構成 (本リポ同梱の実体)
 
 ```
 terraform-aws-infra/
 ├── README.md
 ├── environments/
-│   ├── dev/
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── terraform.tfvars
-│   └── prod/
-│       ├── main.tf
-│       ├── variables.tf
-│       └── terraform.tfvars
-├── modules/
-│   ├── vpc/
-│   ├── eks/
-│   ├── aurora/
-│   ├── s3/
-│   └── monitoring/
-└── docs/
-    └── architecture.md
+│   └── dev/
+│       └── main.tf
+└── modules/
+    ├── vpc/
+    ├── eks/
+    └── aurora/
 ```
 
 ## クイックスタート

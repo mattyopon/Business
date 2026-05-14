@@ -94,8 +94,9 @@ Client (Web/Mobile)
 ### 5.1 認可
 
 - 認可方式: `COGNITO_USER_POOLS`
-- 検証: トークンの `aud` が App Client ID と一致、`token_use=id`
-- スコープ別エンドポイントで `OAuth Scopes` を強制
+- 検証: **Access Token** (`token_use=access`) を期待。`aud` (cognito 側は `client_id` claim) が App Client ID と一致することを確認
+- スコープ別エンドポイントで `OAuth Scopes` を強制 (Access Token の `scope` claim をマッチ。これは ID Token には載らない claim のため Access Token 必須)
+- ユーザー属性 (氏名 / email) を Lambda 側で参照する場合は、別途 `X-Id-Token` ヘッダで ID Token を渡してもらい、Lambda 内で `token_use=id` を検証する
 
 ### 5.2 スロットリング
 

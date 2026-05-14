@@ -1,10 +1,10 @@
-# Terraform AWS インフラ構築デモ
+# Terraform AWS インフラ構築デモ (金融AWS共通基盤 案件配下)
 
-医療IT案件向けのAWSインフラをTerraformでコード化したデモです。
+汎用 AWS インフラ (VPC + EKS + Aurora) を Terraform でコード化したサンプルです。本案件 (金融AWS共通基盤) の参考デモとして、ANK0000639199 (医療MLOps) から流用したコード構造をベースにしており、**金融機関特有の Landing Zone / Organizations / FISC 要件 / Direct Connect は本デモには含まれていません**。
 
 ## 概要
 
-本デモは、医療系AIプロダクトの本番環境を想定したAWSインフラをTerraformで構築します。
+本デモは、金融AWS共通基盤を構築する際のベース構造 (VPC + EKS + Aurora MySQL) を Terraform でコード化した雛形です。金融機関固有要件 (LZA / Control Tower / FISC 安全対策基準 / マルチアカウント SCP / Direct Connect) は別途追加実装が必要です。
 
 ### 構築するリソース
 
@@ -62,7 +62,7 @@ terraform plan
 - VPCフローログ有効化
 
 ### EKS モジュール
-- Kubernetes 1.28
+- Kubernetes 1.33 (2026-05 時点 EKS 標準サポート対象)
 - Fargate プロファイル（サーバーレス）
 - OIDC プロバイダー（IAM連携）
 - クラスターログ有効化

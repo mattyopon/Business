@@ -26,13 +26,17 @@
 ## クイックスタート
 
 ```bash
-# 起動
+# 1. .env を作成し、Grafana 初期管理者を設定 (admin/admin で起動できないように env 必須化)
+cp .env.example .env
+# .env を編集: GF_SECURITY_ADMIN_USER / GF_SECURITY_ADMIN_PASSWORD を強いパスワードに
+
+# 2. 起動
 docker-compose up -d
 
-# 確認
+# 3. 確認
 docker-compose ps
 
-# ログ
+# 4. ログ
 docker-compose logs -f
 ```
 
@@ -40,10 +44,10 @@ docker-compose logs -f
 
 | サービス | URL | 認証 |
 |---------|-----|------|
-| Grafana | http://localhost:3000 | admin / admin |
+| Grafana | http://localhost:3000 | .env で設定した `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` |
 | Prometheus | http://localhost:9090 | - |
 | AlertManager | http://localhost:9093 | - |
-| Sample App | http://localhost:8000 | - |
+| Sample App | http://localhost:8000 | **本リポでは未同梱** (docker-compose.yml で sample-app をコメントアウト中)。実プロジェクトで `./app/Dockerfile` を追加してから有効化 |
 
 ## 監視メトリクス
 
