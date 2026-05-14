@@ -106,9 +106,9 @@
 | 監査ログ | 改ざん防止、長期保管 | AWS CloudTrail（組織トレイル）、Amazon S3 Object Lock、S3 Glacier | Log Archive アカウントに集約、Object Lock、Glacier 長期保管 |
 | 脅威検出 | 不正アクセス検知 | Amazon GuardDuty、Amazon Inspector、Amazon Macie | Audit アカウントに委任、全アカウント有効化 |
 | サードパーティ管理 | 台帳整備、リスク評価 | AWS Audit Manager、共通基盤運用ドキュメント | 共通基盤側で雛形提供、利用システム側で個別記載 |
-| データの論理的廃棄 | 利用終了時のデータ削除 | S3 オブジェクト削除＋KMS 鍵削除＋バージョニング履歴削除 | 廃棄手順書を整備、削除証跡の保管 |
+| データの論理的廃棄 | 利用終了時のデータ削除 | S3 オブジェクトの削除、バージョニング履歴削除、Object Lock 保持期間経過後の削除、専用 CMK の場合は鍵削除（共有 CMK は対象外） | データ分類別の廃棄手順書を整備、削除証跡の保管。Object Lock 適用データは保持期間経過後の削除を計画 |
 | TLPT | 脅威ベースのペネトレーションテスト | AWS のサポートを得たレッドチーム演習 | 共通基盤対象の TLPT 実施計画 |
-| データ越境移転 | 提供先国情報の確認 | リージョン制約、Region Deny SCP | 東京リージョン制約、例外のみ承認 |
+| データ越境移転 | 外国にある第三者への提供および外国所在のクラウド事業者による個人データの取扱いの確認、提供先国情報の本人提供、外国制度の年 1 回以上の確認 | リージョン制約（Region Deny SCP）、データ取扱い責任分界の契約整理、運用要員所在の把握、AWS の越境取扱い箇所の評価 | 東京リージョン制約は前提条件の 1 つに留め、別途、外国にある第三者への提供および取扱いの該当性評価フロー、運用要員所在の管理、AWS 側のデータアクセス整理を実施 |
 | 経済安全保障 | 特定重要設備の事前届出 | ISMAP 登録クラウドの選定 | クラウド選定基準への組込み |
 | 出口戦略 | サービス利用終了時の移行 | データエクスポート、IaC による再構築可能性 | 出口戦略ドキュメントの整備 |
 
@@ -119,12 +119,12 @@
 | 資料 | 提供元 | 用途 |
 |------|--------|------|
 | AWS Well-Architected Financial Services Industry Lens | AWS | 金融業界向けのアーキテクチャレビュー |
-| AWS Well-Architected FSI Lens for FISC | AWS | FISC 対応に特化したレビュー |
+| FSI Lens for FISC（AWS 金融リファレンスアーキテクチャ日本版 GitHub に含まれる Lens） | AWS | FSI Lens を FISC 安全対策基準への対応にマッピングした Lens。AWS Well-Architected Tool への正式 Lens Catalog 登録ではなく、GitHub から取得して参照する形態 |
 | AWS 金融リファレンスアーキテクチャ日本版 | AWS | 9 ワークロード（勘定系、コンタクトセンター、顧客チャネル、マーケットデータ、オープン API、データ分析、モバイル、サイバーレジリエンス、生成 AI）の CDK サンプル |
 | BLEA for FSI | AWS | ガバナンスベースとしての CDK 実装 |
 | AWS FISC 対応リファレンス | AWS パートナー共同（NRI／SCSK／ISID 等） | 第 2 版（2024-08）。FISC 安全対策基準と AWS サービスの対応 |
 | AWS Compliance Center (FISC) | AWS | FISC に関する公式コンプライアンスページ |
-| AWS Audit Manager 事前定義フレームワーク | AWS | FISC、PCI DSS、HIPAA 等の監査証跡自動収集 |
+| AWS Audit Manager 事前定義フレームワーク | AWS | PCI DSS、HIPAA、NIST 800-53 等の事前定義フレームワークが提供される。FISC 安全対策基準は事前定義フレームワークとしては提供されていないため、Audit Manager 上で独自のカスタムフレームワークを作成する必要がある |
 
 ---
 
