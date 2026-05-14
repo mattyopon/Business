@@ -144,10 +144,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (Workload Identity Federation / OIDC)
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          # 長期 SA 鍵 (credentials_json) は使用しない。WIF 経由で短命 OIDC トークンを利用する。
+          # WIF Pool / Provider / SA は事前に Terraform で構築済み (terraform/workload_identity.tf)
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker asia-northeast1-docker.pkg.dev
@@ -188,7 +191,10 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 ```
 
-### 3.2 CD ワークフロー（Staging）
+### 3.2 CD ワークフロー（Staging / GitOps）
+
+> **GitOps 一本化**: 本案件は ArgoCD を宣言元として運用する。GitHub Actions は **マニフェスト Repo の tag を書き換えて commit / push するのみ**。実際の `kubectl apply` は ArgoCD が sync で行う。
+> `kubectl apply -k` を CI から直接打たないことで、宣言元の二重化とドリフトを避ける。
 
 ```yaml
 # .github/workflows/cd-staging.yml
@@ -198,6 +204,17 @@ on:
   push:
     branches: [develop]
 
+env:
+  REGISTRY: asia-northeast1-docker.pkg.dev
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}  # GitHub Environment 'staging' の variables/secrets でも可
+  IMAGE_NAME: payment-api
+  MANIFEST_REPO: payment/payment-manifests   # ArgoCD が監視する別リポジトリ
+  ARGOCD_APP: payment-staging
+
+permissions:
+  id-token: write   # WIF 用に必須
+  contents: read
+
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
@@ -206,38 +223,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: Checkout manifest repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MANIFEST_REPO }}
+          token: ${{ secrets.GH_PAT_MANIFEST }}
+          path: manifests
 
-      - name: Get GKE credentials
+      - name: Bump image tag in manifest repo
+        working-directory: manifests/overlays/staging
         run: |
-          gcloud container clusters get-credentials payment-staging-gke \
-            --region asia-northeast1
+          kustomize edit set image \
+            payment-api=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/payment/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          git config user.email "ci-bot@example.com"
+          git config user.name "ci-bot"
+          git add kustomization.yaml
+          git commit -m "chore(staging): bump payment-api to ${{ github.sha }}"
+          git push
 
-      - name: Update Kubernetes manifests
+      - name: Trigger ArgoCD sync and wait for healthy
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
         run: |
-          cd k8s/overlays/staging
-          kustomize edit set image payment-api=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/payment/payment-api:${{ github.sha }}
-
-      - name: Deploy to Staging
-        run: |
-          kubectl apply -k k8s/overlays/staging
-
-      - name: Wait for rollout
-        run: |
-          kubectl rollout status deployment/payment-api -n staging --timeout=300s
+          argocd app sync "${ARGOCD_APP}" --prune --timeout 300
+          argocd app wait "${ARGOCD_APP}" --health --operation --timeout 300
 
       - name: Run smoke tests
         run: |
           ./scripts/smoke-test.sh https://staging-api.example.com
 ```
 
-### 3.3 CD ワークフロー（Production）
+### 3.3 CD ワークフロー（Production / Canary + GitOps）
+
+> Production も GitOps を継承し、`canary` → `wait & verify` → `full` の 3段階を **manifest repo の overlays 切替** で行う。
+> エラー率判定は Prometheus HTTP API (`/api/v1/query`) を curl で叩く。`promql` というCLIは標準で存在せず、`kubectl exec` での実行は依存しすぎるため避ける。
 
 ```yaml
 # .github/workflows/cd-production.yml
@@ -247,6 +273,19 @@ on:
   push:
     branches: [main]
 
+env:
+  REGISTRY: asia-northeast1-docker.pkg.dev
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  IMAGE_NAME: payment-api
+  MANIFEST_REPO: payment/payment-manifests
+  ARGOCD_APP_CANARY: payment-prod-canary
+  ARGOCD_APP_PROD: payment-prod
+  PROMETHEUS_URL: ${{ secrets.PROMETHEUS_URL }}  # 例: https://prometheus.internal.example.com
+
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy-production:
     runs-on: ubuntu-latest
@@ -255,39 +294,79 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: Checkout manifest repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MANIFEST_REPO }}
+          token: ${{ secrets.GH_PAT_MANIFEST }}
+          path: manifests
 
-      - name: Get GKE credentials
+      - name: Bump canary tag
+        working-directory: manifests/overlays/production-canary
         run: |
-          gcloud container clusters get-credentials payment-prod-gke \
-            --region asia-northeast1
+          kustomize edit set image \
+            payment-api=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/payment/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          git config user.email "ci-bot@example.com"
+          git config user.name "ci-bot"
+          git add kustomization.yaml
+          git commit -m "chore(prod-canary): bump payment-api to ${{ github.sha }}"
+          git push
 
-      - name: Deploy with canary
+      - name: ArgoCD sync canary and wait healthy
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
         run: |
-          # Canary deployment (10%)
-          kubectl apply -k k8s/overlays/production-canary
+          argocd app sync "${ARGOCD_APP_CANARY}" --prune --timeout 300
+          argocd app wait "${ARGOCD_APP_CANARY}" --health --operation --timeout 300
 
-          # Wait and monitor
+      - name: Observe canary error rate (5min)
+        env:
+          PROM_TOKEN: ${{ secrets.PROMETHEUS_BEARER_TOKEN }}
+        run: |
           sleep 300
+          QUERY='sum(rate(http_requests_total{app="payment-api",track="canary",status=~"5.."}[5m])) / sum(rate(http_requests_total{app="payment-api",track="canary"}[5m]))'
+          RESP=$(curl -sf -G \
+            -H "Authorization: Bearer ${PROM_TOKEN}" \
+            --data-urlencode "query=${QUERY}" \
+            "${PROMETHEUS_URL}/api/v1/query")
+          ERROR_RATE=$(echo "${RESP}" | jq -r '.data.result[0].value[1] // "0"')
+          echo "canary 5xx ratio = ${ERROR_RATE}"
+          awk -v r="${ERROR_RATE}" 'BEGIN { if (r+0 > 0.01) exit 1 }'
 
-          # Check error rate
-          ERROR_RATE=$(kubectl exec -n monitoring prometheus-0 -- \
-            promql 'sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))')
+      - name: Bump production tag (full rollout)
+        working-directory: manifests/overlays/production
+        run: |
+          kustomize edit set image \
+            payment-api=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/payment/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          git add kustomization.yaml
+          git commit -m "chore(prod): promote payment-api ${{ github.sha }} after canary"
+          git push
 
-          if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
-            echo "Error rate too high, rolling back"
-            kubectl rollout undo deployment/payment-api -n production
-            exit 1
-          fi
+      - name: ArgoCD sync production
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          argocd app sync "${ARGOCD_APP_PROD}" --prune --timeout 600
+          argocd app wait "${ARGOCD_APP_PROD}" --health --operation --timeout 600
 
-          # Full rollout
-          kubectl apply -k k8s/overlays/production
+      - name: Rollback on failure
+        if: failure()
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          # 直前の synced revision に戻す (manifest repo の git revert で実施)
+          git -C manifests revert --no-edit HEAD
+          git -C manifests push
+          argocd app sync "${ARGOCD_APP_CANARY}" --revision HEAD~1 --timeout 300 || true
 
       - name: Notify Slack
         uses: slackapi/slack-github-action@v1.24.0

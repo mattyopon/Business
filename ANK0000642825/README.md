@@ -35,8 +35,8 @@
 
 | 資料 | 説明 |
 |------|------|
-| [Elasticsearch構築デモ](技術検証/elasticsearch-demo/) | OpenSearch/Elasticsearchクラスター構築 |
-| [Terraform AWS Infrastructure](技術検証/terraform-aws-infra/) | IaCによるAWSインフラ構築デモ |
+| [OpenSearch構築デモ](技術検証/opensearch-demo/) | OpenSearch Service の検証デモ (補完検索・analyzer 設定) |
+| [Terraform AWS Search Infrastructure](技術検証/terraform-aws-search/) | IaCによる検索基盤 (VPC + OpenSearch Domain) 構築デモ |
 
 ---
 

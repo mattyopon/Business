@@ -26,14 +26,71 @@ aws opensearch describe-domain --domain-name search-prod \
   --query 'DomainStatus.Endpoint' --output text
 ```
 
-### 2.2 curlでのアクセス（IAM認証）
+### 2.2 curl での SigV4 署名アクセス（IAM 認証 / Managed Service ドメイン）
+
+OpenSearch Service (Managed) は IAM 認証ドメインの場合、リクエストに **AWS SigV4 署名** を付ける必要がある。Serverless ではない（`aws opensearch-serverless` は対象外）。
+
+#### 方法 A. `awscurl` を使う（推奨）
 
 ```bash
-# AWS SigV4署名を使用
-aws opensearch-serverless get-access-policy ...
+# 事前準備
+pip install awscurl
+export AWS_PROFILE=search-ops
+export ENDPOINT=https://search-prod-xxxx.ap-northeast-1.es.amazonaws.com
 
-# または aws-requests-auth を使用したPython
+# クラスタヘルス
+awscurl --region ap-northeast-1 --service es \
+  -X GET "${ENDPOINT}/_cluster/health?pretty"
+
+# インデックス一覧
+awscurl --region ap-northeast-1 --service es \
+  -X GET "${ENDPOINT}/_cat/indices?v"
 ```
+
+#### 方法 B. curl + `--aws-sigv4` (curl 7.75+)
+
+```bash
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_SESSION_TOKEN=...   # 短命トークン推奨 (IAM Identity Center / AssumeRole)
+export ENDPOINT=search-prod-xxxx.ap-northeast-1.es.amazonaws.com
+
+curl -s \
+  --aws-sigv4 "aws:amz:ap-northeast-1:es" \
+  --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+  -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" \
+  "https://${ENDPOINT}/_cluster/health?pretty"
+```
+
+#### 方法 C. Python (`opensearch-py` + `requests-aws4auth`)
+
+```python
+from opensearchpy import OpenSearch, RequestsHttpConnection
+from requests_aws4auth import AWS4Auth
+import boto3
+
+region = "ap-northeast-1"
+credentials = boto3.Session().get_credentials()
+awsauth = AWS4Auth(
+    credentials.access_key,
+    credentials.secret_key,
+    region,
+    "es",
+    session_token=credentials.token,
+)
+
+client = OpenSearch(
+    hosts=[{"host": "search-prod-xxxx.ap-northeast-1.es.amazonaws.com", "port": 443}],
+    http_auth=awsauth,
+    use_ssl=True,
+    verify_certs=True,
+    connection_class=RequestsHttpConnection,
+)
+
+print(client.cluster.health())
+```
+
+> **注意**: `http_auth=('username','password')` のような Basic 認証はマスター内部DB (`internal_user_database_enabled=true`) を有効化したドメインのみ。本案件は IAM Role を `master_user` にする想定 (`terraform-aws-search/main.tf` 参照) なので、Basic 認証は使えない。
 
 ### 2.3 OpenSearch Dashboards
 

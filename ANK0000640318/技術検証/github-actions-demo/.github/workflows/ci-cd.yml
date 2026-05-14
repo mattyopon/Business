@@ -1,98 +1,103 @@
-# CI/CD Pipeline for Financial Platform
-# GitHub Actions workflow example
-
-name: CI/CD Pipeline
+name: CI-CD Demo (Payment Platform)
 
 on:
+  pull_request:
+    branches: [main, develop]
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write   # Workload Identity Federation 用
+  security-events: write
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: asia-northeast1-docker.pkg.dev
+  IMAGE_NAME: payment-api
 
 jobs:
-  # ============================================
-  # Build & Test
-  # ============================================
-  build:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go test ./... -race -coverprofile=coverage.out
 
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    outputs:
+      image_uri: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - run: gcloud auth configure-docker ${REGISTRY}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/payment/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+
+      - uses: docker/build-push-action@v5
         with:
           context: .
-          push: false
-          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ============================================
-  # Security Scan
-  # ============================================
-  security:
+  scan:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs'
-          ignore-unfixed: true
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
+          image-ref: ${{ needs.build.outputs.image_uri }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+      - uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: trivy.sarif
 
-  # ============================================
-  # Deploy to Staging
-  # ============================================
   deploy-staging:
     runs-on: ubuntu-latest
-    needs: [build, security]
+    needs: scan
     if: github.ref == 'refs/heads/develop'
     environment: staging
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - run: echo "GitOps: 別 manifest repo の overlays/staging を kustomize edit + ArgoCD sync"
 
-      - name: Deploy to Staging
-        run: |
-          echo "Deploying to staging environment..."
-          # kubectl apply -f k8s/staging/
-
-  # ============================================
-  # Deploy to Production
-  # ============================================
   deploy-production:
     runs-on: ubuntu-latest
-    needs: [build, security]
+    needs: scan
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy to Production
-        run: |
-          echo "Deploying to production environment..."
-          # kubectl apply -f k8s/production/
-
-      - name: Notify deployment
-        run: |
-          echo "Deployment completed: ${{ github.sha }}"
+      - run: echo "GitOps: canary → 観測 (Prometheus HTTP API) → full rollout"

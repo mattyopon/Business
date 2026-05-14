@@ -59,12 +59,16 @@ resource "google_compute_router_nat" "main" {
 }
 
 # ----------------------------------------------
-# GKE Cluster
+# GKE Cluster (Autopilot mode)
+# 参画用/運用ドキュメント/01_インフラ設計書.md と整合させるため Autopilot 構成にする。
+# Autopilot は Google がノード管理 (容量・OS・パッチ・スケール) を行うため、
+# node_pool / shielded_instance_config / autoscaling 等は不要 (Autopilot 自体に内蔵)。
 # ----------------------------------------------
 resource "google_container_cluster" "main" {
-  name     = "${var.project_name}-gke"
-  location = var.region
-  project  = var.project_id
+  name             = "${var.project_name}-gke"
+  location         = var.region
+  project          = var.project_id
+  enable_autopilot = true
 
   # VPC設定
   network    = google_compute_network.main.name
@@ -83,54 +87,17 @@ resource "google_container_cluster" "main" {
     services_secondary_range_name = "services"
   }
 
-  # デフォルトノードプールを削除
-  remove_default_node_pool = true
-  initial_node_count       = 1
-
-  # Workload Identity
-  workload_identity_config {
-    workload_pool = "${var.project_id}.svc.id.goog"
+  # Master Authorized Networks (運用元 / 踏み台 / IAP から)
+  master_authorized_networks_config {
+    cidr_blocks {
+      cidr_block   = "10.0.0.0/8"
+      display_name = "internal-ops"
+    }
   }
 
-  # ログ・監視
-  logging_service    = "logging.googleapis.com/kubernetes"
-  monitoring_service = "monitoring.googleapis.com/kubernetes"
-}
-
-# Node Pool
-resource "google_container_node_pool" "main" {
-  name       = "${var.project_name}-node-pool"
-  location   = var.region
-  cluster    = google_container_cluster.main.name
-  project    = var.project_id
-
-  # オートスケーリング
-  autoscaling {
-    min_node_count = 2
-    max_node_count = 10
-  }
-
-  node_config {
-    machine_type = "e2-standard-4"
-    disk_size_gb = 100
-    disk_type    = "pd-ssd"
-
-    oauth_scopes = [
-      "https://www.googleapis.com/auth/cloud-platform"
-    ]
-
-    # セキュリティ
-    shielded_instance_config {
-      enable_secure_boot = true
-    }
-
-    workload_metadata_config {
-      mode = "GKE_METADATA"
-    }
-
-    labels = {
-      environment = var.environment
-    }
+  # リリースチャンネル (Autopilot は REGULAR/STABLE が選べる)
+  release_channel {
+    channel = "REGULAR"
   }
 }
 
@@ -194,4 +161,98 @@ resource "google_redis_instance" "main" {
   redis_version = "REDIS_7_0"
 
   transit_encryption_mode = "SERVER_AUTHENTICATION"
+}
+
+# ----------------------------------------------
+# Cloud Armor (WAF / DDoS) - 設計書 01_インフラ設計書.md "6.1 Cloud Armor" と整合
+# ----------------------------------------------
+resource "google_compute_security_policy" "main" {
+  name        = "${var.project_name}-armor"
+  project     = var.project_id
+  description = "Cloud Armor policy for payment platform"
+
+  # OWASP マネージドルール (XSS / SQLi)
+  rule {
+    action   = "deny(403)"
+    priority = 1000
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('xss-stable')"
+      }
+    }
+    description = "Block XSS attacks"
+  }
+
+  rule {
+    action   = "deny(403)"
+    priority = 1001
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('sqli-stable')"
+      }
+    }
+    description = "Block SQL injection"
+  }
+
+  # Rate-based (1分1000reqまで)
+  rule {
+    action   = "rate_based_ban"
+    priority = 2000
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    rate_limit_options {
+      enforce_on_key = "IP"
+      rate_limit_threshold {
+        count        = 1000
+        interval_sec = 60
+      }
+      conform_action = "allow"
+      exceed_action  = "deny(429)"
+      ban_duration_sec = 600
+    }
+    description = "Rate limit per source IP"
+  }
+
+  # デフォルトルール
+  rule {
+    action   = "allow"
+    priority = 2147483647
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+    description = "Default allow"
+  }
+}
+
+# ----------------------------------------------
+# Cloud Spanner - 設計書 01_インフラ設計書.md "5.2 Cloud Spanner" と整合
+#   regional 構成 = 単一リージョン強整合 (グローバル分散ではない点に注意)
+# ----------------------------------------------
+resource "google_spanner_instance" "main" {
+  name             = "${var.project_name}-spanner"
+  display_name     = "${var.project_name}-spanner"
+  config           = "regional-${var.region}"
+  processing_units = 1000  # 1 node 相当
+  project          = var.project_id
+
+  labels = {
+    env       = var.environment
+    workload  = "payment"
+    managedby = "terraform"
+  }
+}
+
+resource "google_spanner_database" "payment" {
+  instance                 = google_spanner_instance.main.name
+  name                     = "payment"
+  project                  = var.project_id
+  version_retention_period = "7d"
+  deletion_protection      = true
 }

@@ -104,17 +104,15 @@ ECS + EC2およびECS Fargateでの構築・運用経験があります。
 
 ### Q: Kubernetesの経験はありますか？
 
-EKS Fargateの運用経験があります。
+**運用経験 (実務)**:
+- EKS Fargate での 24/365 監視運用、Pod / Deployment / Service のトラブルシュート、kubectl 操作
 
-**経験内容**:
-- Podの監視・ログ確認
-- Deployment、Serviceの理解
-- kubectlによる操作
+**実施済み検証 (本リポジトリ)**:
+- GKE 向け Deployment / Service / HPA / Namespace / ConfigMap / Secret 雛形を `技術検証/k8s-manifests/` に作成済
+- ArgoCD + kustomize による GitOps デプロイフローを `参画用/運用ドキュメント/02_CI-CD運用ガイド.md` に Workload Identity Federation 前提で設計
 
-**今後習得したい領域**:
-- Kubernetesクラスタの設計・構築
-- Helm Chartの作成
-- GitOps（ArgoCD）の導入
+**コミット範囲**:
+- 本案件では「クラスタ構築は AWS で 5年運用してきた経験を GKE に転写」「初期マニフェスト設計と GitOps ワークフロー構築」「監視設計・障害対応 Runbook 整備」を担当し、Helm Chart の独自開発はチームと協議の上で必要に応じて取り組みます。
 
 ---
 
@@ -145,20 +143,22 @@ EKS Fargateの運用経験があります。
 - **セキュリティ**: WAF, IAM, GuardDuty, Inspector
 - **その他**: S3, Step Functions, API Gateway
 
-**資格**: SAA, Developer, SysOps（2020年取得）
+**資格 (取得歴)**: AWS Certified Solutions Architect / Developer / SysOps Administrator – Associate (2020年取得。AWS 認定は取得から 3 年で再認定が必要。2026年5月時点の現役有効性は商談時に最新状況を共有)
 
 ---
 
 ### Q: GCPの経験はありますか？
 
-放送局グループMSP監視運用でGCP環境の運用経験があります。
+**運用経験 (実務)**:
+- 放送局グループ MSP 案件で Compute Engine / Cloud Run / Cloud Monitoring の運用・監視を担当
 
-**経験内容**:
-- Compute Engineのモニタリング
-- Cloud Runの運用
-- Cloud Monitoringによる監視
+**実施済み検証 (本リポジトリ)**:
+- 本案件向けに `技術検証/terraform-gcp/` で VPC / GKE / Cloud SQL (PostgreSQL) / Memorystore / Cloud Armor を IaC 化
+- `参画用/運用ドキュメント/01_インフラ設計書.md` で Cloud Spanner regional 構成 (単一リージョン HA) のスコープを明示し、グローバル分散へ移行する場合のトリガーと影響を整理
 
-本格的な設計・構築経験はこれからですが、AWSの経験があるため、キャッチアップは可能です。
+**コミット範囲**:
+- AWS で 5 年構築・運用してきた設計思想 (マルチ AZ / 最小権限 / IaC / GitOps / SLO ベース監視) を GCP / GKE に転写することにコミットします。
+- GCP 固有の最適化 (例: Anthos, Cloud Spanner マルチリージョン特性) は本案件期間中に GCP Professional Architect 取得を目標に並走で習熟します。
 
 ---
 
@@ -215,15 +215,15 @@ EKS Fargateの運用経験があります。
 
 ### Q: Prometheusの経験はありますか？
 
-実務での本格的な経験は限定的ですが、基本的な概念は理解しています。
+**実務経験**:
+- New Relic / CloudWatch / Zabbix を主軸に 24/365 監視を運用 (5年)。アラート設計・閾値最適化・Runbook 整備の知見を Prometheus にそのまま適用可能
 
-**理解している内容**:
-- メトリクス収集の仕組み（Pull型）
-- PromQL（クエリ言語）
-- Grafanaとの連携
-- AlertManagerによるアラート
+**実施済み検証 (本リポジトリ)**:
+- `技術検証/monitoring-demo/` に Prometheus + Grafana + Alertmanager の docker-compose を構築
+- `参画用/運用ドキュメント/02_CI-CD運用ガイド.md` の canary 判定で **Prometheus HTTP API (`/api/v1/query`) を curl で叩く方式** を採用し、PromQL レート式 (`sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))`) でエラー率を判定する CD パイプラインを実装
 
-本案件で必要であれば、積極的にキャッチアップします。
+**コミット範囲**:
+- アラート / ダッシュボード / Runbook 整備を主担当。`recording_rules` / `alerting_rules` のチューニングはアプリ開発チームのレイテンシ SLO と並走して進めます。
 
 ---
 
@@ -248,14 +248,19 @@ EKS Fargateの運用経験があります。
 
 ### Q: 金融系のセキュリティ基準（PCI DSS等）の経験は？
 
-直接PCI DSS対応の経験はありませんが、以下の経験から対応可能と考えています：
+**直接の認定取得経験**:
+- PCI DSS 認定環境の直接構築経験はありません。
 
-- クライアント企業のセキュリティ基準対応（広告配信システム）
-- AWS Inspector/GuardDutyによる脆弱性対応
-- 監査ログの設計・運用（CloudTrail）
-- IAM最小権限設計
+**転用可能な実務経験**:
+- クライアント企業のセキュリティ基準 (放送局 / 広告配信) への対応、AWS Inspector / GuardDuty / Macie 等による脆弱性 / PII 対策、CloudTrail / Config による監査ログ整備、IAM 最小権限設計
+- 5年の本番運用で身についた「ログ保管期間」「鍵管理」「ネットワーク分離」「アクセスレビュー」の運用感覚
 
-PCI DSSの詳細要件については、必要に応じて学習します。
+**実施済み検証 (本リポジトリ)**:
+- `参画用/運用ドキュメント/06_セキュリティガイドライン.md` で **PCI DSS 12要件に対する設計マッピング表** を作成 (要件 1〜12 と AWS / GCP リソースの対応)
+- 同文書で 12.10 (インシデント対応) を踏まえた連絡網雛形を整備し、プレースホルダ運用の禁止を明文化
+
+**コミット範囲**:
+- 「PCI DSS 12要件の運用解釈」「監査証跡の整備」「セキュリティ Runbook と訓練」を主担当。QSA / 監査法人とのやり取りはクライアント側 PCI DSS 担当者と並走しながら、運用側の実装と証跡提示を着実に進めます。
 
 ---
 

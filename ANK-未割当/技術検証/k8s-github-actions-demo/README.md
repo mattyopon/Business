@@ -23,15 +23,24 @@
 # 1. Minikube起動
 minikube start
 
-# 2. デプロイ
+# 2. アプリのコンテナイメージをビルド & Minikube に取り込む
+#    (Deployment の imagePullPolicy: Never でローカルイメージ前提のため事前ロードが必須)
+eval $(minikube docker-env)
+docker build -t demo-app:latest ./app
+
+# 3. デプロイ
 kubectl apply -f kubernetes/
 
-# 3. サービス確認
+# 4. サービス確認
 kubectl get all
 
-# 4. アプリにアクセス
+# 5. アプリにアクセス
 minikube service demo-app-service
 ```
+
+> **注**: `kubernetes/deployment.yaml` は `image: demo-app:latest` + `imagePullPolicy: Never` を前提にしているため、
+> 上記の step 2 (Minikube 内ビルド) を **必ず先に実行** する必要があります。これを省略すると `ImagePullBackOff` で起動しません。
+> リモートレジストリ (GHCR / Docker Hub / ECR) からの pull に切り替える場合は `image:` を完全修飾名にし、`imagePullPolicy: IfNotPresent` に変更してください。
 
 ## ディレクトリ構成
 

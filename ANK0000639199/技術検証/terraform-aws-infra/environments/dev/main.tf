@@ -77,17 +77,22 @@ module "eks" {
   source = "../../modules/eks"
 
   cluster_name    = "${local.name_prefix}-eks"
-  cluster_version = "1.28"
+  cluster_version = "1.33"
 
   vpc_id          = module.vpc.vpc_id
   subnet_ids      = module.vpc.private_subnet_ids
 
-  # Fargate Profile
+  # Fargate Profile (運用ドキュメント 01_AWSインフラ設計書.md と一致させる)
   fargate_profiles = {
     default = {
       selectors = [
         { namespace = "default" },
         { namespace = "kube-system" }
+      ]
+    }
+    application = {
+      selectors = [
+        { namespace = "app" }
       ]
     }
     mlops = {

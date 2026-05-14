@@ -51,6 +51,10 @@ PUT /products/_mapping
       "fields": {
         "keyword": {
           "type": "keyword"
+        },
+        "suggest": {
+          "type": "completion",
+          "analyzer": "keyword"
         }
       }
     },
@@ -206,6 +210,9 @@ GET /products/_search
 ```
 
 ### オートコンプリート
+
+> マッピング側で `name.suggest` を `completion` 型として定義しているため、`name` フィールドをそのまま流用できる。
+> データ投入時は `name` を `{ "input": ["..."] }` 形式にせずとも、`name` 文字列がそのまま suggester 入力になる。
 
 ```json
 GET /products/_search
