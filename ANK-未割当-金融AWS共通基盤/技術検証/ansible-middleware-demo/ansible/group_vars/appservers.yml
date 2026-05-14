@@ -1,0 +1,49 @@
+---
+# =============================================================================
+# Application Servers Variables
+# =============================================================================
+
+# Docker 基本設定
+docker_edition: ce
+docker_version: ""  # 空の場合は最新版
+docker_compose_version: ""  # 空の場合は最新版
+
+# Docker デーモン設定
+docker_daemon_options:
+  storage-driver: overlay2
+  log-driver: json-file
+  log-opts:
+    max-size: "100m"
+    max-file: "5"
+  default-ulimits:
+    nofile:
+      Name: nofile
+      Hard: 65535
+      Soft: 65535
+
+# Docker ユーザー
+docker_users:
+  - ubuntu
+
+# Docker ネットワーク
+docker_networks:
+  - name: app_network
+    driver: bridge
+
+# レジストリ認証（ECRなど）
+docker_registry_enabled: false
+docker_registry_url: ""
+docker_registry_username: ""
+docker_registry_password: ""
+
+# コンテナリソース制限
+docker_default_memory_limit: "512m"
+docker_default_cpu_limit: "0.5"
+
+# ログローテーション
+docker_log_max_size: "100m"
+docker_log_max_file: 5
+
+# Prometheus メトリクス
+docker_metrics_enabled: true
+docker_metrics_port: 9323

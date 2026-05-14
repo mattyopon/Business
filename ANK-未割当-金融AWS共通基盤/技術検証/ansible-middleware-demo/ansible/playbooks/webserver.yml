@@ -1,0 +1,31 @@
+---
+# =============================================================================
+# Web Server Playbook
+# =============================================================================
+# 使用方法: ansible-playbook playbooks/webserver.yml
+
+- name: Configure web servers
+  hosts: webservers
+  become: yes
+
+  pre_tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+  roles:
+    - common
+    - nginx
+    - node_exporter
+
+  post_tasks:
+    - name: Verify Nginx is running
+      service:
+        name: nginx
+        state: started
+      register: nginx_status
+
+    - name: Display Nginx status
+      debug:
+        msg: "Nginx is {{ 'running' if nginx_status.changed == false else 'was started' }}"

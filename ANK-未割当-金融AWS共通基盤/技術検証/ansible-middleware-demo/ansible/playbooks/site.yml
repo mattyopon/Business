@@ -1,0 +1,24 @@
+---
+# =============================================================================
+# Site Playbook - メインエントリーポイント
+# =============================================================================
+# 使用方法: ansible-playbook playbooks/site.yml
+
+- name: Apply common configuration to all hosts
+  hosts: all
+  become: yes
+  roles:
+    - common
+    - node_exporter
+
+- name: Configure web servers
+  hosts: webservers
+  become: yes
+  roles:
+    - nginx
+
+- name: Configure application servers
+  hosts: appservers
+  become: yes
+  roles:
+    - docker

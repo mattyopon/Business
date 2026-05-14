@@ -1,0 +1,75 @@
+---
+# =============================================================================
+# Node Exporter Role - Prometheus監視エージェント
+# =============================================================================
+
+- name: Create node_exporter user
+  user:
+    name: node_exporter
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+
+- name: Check if node_exporter is installed
+  stat:
+    path: /usr/local/bin/node_exporter
+  register: node_exporter_binary
+
+- name: Download node_exporter
+  get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: /tmp/node_exporter.tar.gz
+    mode: '0644'
+  when: not node_exporter_binary.stat.exists
+
+- name: Create temp directory for extraction
+  file:
+    path: /tmp/node_exporter
+    state: directory
+    mode: '0755'
+  when: not node_exporter_binary.stat.exists
+
+- name: Extract node_exporter
+  unarchive:
+    src: /tmp/node_exporter.tar.gz
+    dest: /tmp/node_exporter
+    remote_src: yes
+    extra_opts:
+      - --strip-components=1
+  when: not node_exporter_binary.stat.exists
+
+- name: Copy node_exporter binary
+  copy:
+    src: /tmp/node_exporter/node_exporter
+    dest: /usr/local/bin/node_exporter
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0755'
+  when: not node_exporter_binary.stat.exists
+  notify: Restart node_exporter
+
+- name: Create node_exporter systemd service
+  template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd
+    - Restart node_exporter
+
+- name: Ensure node_exporter is running
+  service:
+    name: node_exporter
+    state: started
+    enabled: yes
+
+- name: Clean up temp files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/node_exporter.tar.gz
+    - /tmp/node_exporter

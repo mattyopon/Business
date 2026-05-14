@@ -1,0 +1,21 @@
+{
+  "storage-driver": "{{ docker_daemon_options['storage-driver'] | default('overlay2') }}",
+  "log-driver": "{{ docker_daemon_options['log-driver'] | default('json-file') }}",
+  "log-opts": {
+    "max-size": "{{ docker_log_max_size }}",
+    "max-file": "{{ docker_log_max_file }}"
+  },
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 65535,
+      "Soft": 65535
+    }
+  },
+{% if docker_metrics_enabled %}
+  "metrics-addr": "0.0.0.0:{{ docker_metrics_port }}",
+  "experimental": true,
+{% endif %}
+  "live-restore": true,
+  "userland-proxy": false
+}

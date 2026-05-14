@@ -1,0 +1,45 @@
+---
+# =============================================================================
+# Docker Playbook
+# =============================================================================
+# 使用方法: ansible-playbook playbooks/docker.yml
+
+- name: Configure Docker on application servers
+  hosts: appservers
+  become: yes
+
+  pre_tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+  roles:
+    - common
+    - docker
+    - node_exporter
+
+  post_tasks:
+    - name: Verify Docker is running
+      service:
+        name: docker
+        state: started
+      register: docker_status
+
+    - name: Check Docker version
+      command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Display Docker version
+      debug:
+        msg: "{{ docker_version.stdout }}"
+
+    - name: Check Docker Compose version
+      command: docker compose version
+      register: compose_version
+      changed_when: false
+
+    - name: Display Docker Compose version
+      debug:
+        msg: "{{ compose_version.stdout }}"
