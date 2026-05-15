@@ -1,23 +1,53 @@
 name: CI-CD Demo (Payment Platform)
 
+# 本デモは「金融決済バックエンドの GHA → GAR → GitOps デプロイ」の参考設計を見せるためのもの。
+# 実コードは未同梱 (`Dockerfile` と README のみ) のため、`lint` / `test` / `build` /
+# `scan` / `deploy-*` は **trigger を絞って自動失敗を起こさない** 構成にしてある。
+#
+# 同梱状況:
+#   - Dockerfile (Multi-stage Go ビルド想定の雛形)
+#   - README.md (本デモの解説)
+#   - 同梱外: go.mod / *.go (Go アプリ本体) / kustomize manifest / ArgoCD Application
+#
+# 実コードを同梱したら以下を有効化する:
+#   - lint / test ジョブの `if: false` を外す (Go コードを同梱)
+#   - build ジョブの `image-ref` を 1 つの tag に絞る (現状 metadata-action は複数行を返す)
+#   - workflow_dispatch.inputs.enable_full_pipeline = "true" で初回実行
+
 on:
   pull_request:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      enable_full_pipeline:
+        description: "Run lint/test/build/scan/deploy. Set true only after Go source + tfvars/secrets are populated."
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
-  id-token: write   # Workload Identity Federation 用
+  id-token: write # Workload Identity Federation 用
   security-events: write
 
 env:
   REGISTRY: asia-northeast1-docker.pkg.dev
   IMAGE_NAME: payment-api
+  # 本ワークフローで Docker build / Trivy 等を実行するデモのルートディレクトリ。
+  # 案件 ID でコピーした際は本変数のみ書き換えれば全 job が追従する。
+  DEMO_ROOT: ANK0000640318/技術検証/github-actions-demo
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    # 本デモには go.mod / *.go が同梱されていないため、Go コードが揃うまでスキップ。
+    # 実コード同梱後にこの if を外す。
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_full_pipeline == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -26,23 +56,30 @@ jobs:
       - uses: golangci/golangci-lint-action@v4
         with:
           version: latest
+          working-directory: ${{ env.DEMO_ROOT }}
 
   test:
     runs-on: ubuntu-latest
     needs: lint
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_full_pipeline == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
       - run: go test ./... -race -coverprofile=coverage.out
+        working-directory: ${{ env.DEMO_ROOT }}
 
   build:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push'
+    # 実コード同梱後の `workflow_dispatch + enable_full_pipeline=true` 経路のみで build を起動。
+    # `if: github.event_name == 'push'` のままだと毎 push で fail する (Dockerfile はあるが Go コードがない)。
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_full_pipeline == 'true' }}
     outputs:
-      image_uri: ${{ steps.meta.outputs.tags }}
+      # 単一の tag を Trivy に渡せるよう、SHA tag だけを別途出力する。
+      # `steps.meta.outputs.tags` は newline 区切りの list を返すため、image-ref に直渡しすると Trivy が parse 失敗する。
+      image_uri_sha: ${{ steps.meta.outputs.image_ref_sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -64,9 +101,20 @@ jobs:
             type=sha
             type=ref,event=branch
 
+      - id: extract_sha_tag
+        # metadata-action は複数 tag を newline-separated list で返す。
+        # Trivy は 1 つの image-ref しか取れないため、`type=sha` 由来の決定論的な tag (sha-<sha>)
+        # を 1 行抜き出して後段に渡す。
+        run: |
+          IMAGE_REGISTRY="${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/payment/${{ env.IMAGE_NAME }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "image_ref_sha=${IMAGE_REGISTRY}:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v5
         with:
-          context: .
+          # ビルドコンテキストはこのデモのディレクトリ。リポジトリルートを context にすると Dockerfile が見つからない。
+          context: ${{ env.DEMO_ROOT }}
+          file: ${{ env.DEMO_ROOT }}/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
@@ -75,21 +123,27 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_full_pipeline == 'true' }}
     steps:
-      - uses: aquasecurity/trivy-action@master
+      # Action は再現性確保のためタグ pin する (master 参照は禁止)。
+      - uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ needs.build.outputs.image_uri }}
+          # build ジョブで 1 つに絞った tag (sha-<sha>) を Trivy に渡す。
+          image-ref: ${{ needs.build.outputs.image_uri_sha }}
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
       - uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: trivy.sarif
 
   deploy-staging:
     runs-on: ubuntu-latest
     needs: scan
-    if: github.ref == 'refs/heads/develop'
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_full_pipeline == 'true' && github.ref == 'refs/heads/develop' }}
     environment: staging
     steps:
       - run: echo "GitOps: 別 manifest repo の overlays/staging を kustomize edit + ArgoCD sync"
@@ -97,7 +151,7 @@ jobs:
   deploy-production:
     runs-on: ubuntu-latest
     needs: scan
-    if: github.ref == 'refs/heads/main'
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_full_pipeline == 'true' && github.ref == 'refs/heads/main' }}
     environment: production
     steps:
       - run: echo "GitOps: canary → 観測 (Prometheus HTTP API) → full rollout"
