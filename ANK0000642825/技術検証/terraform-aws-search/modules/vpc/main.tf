@@ -61,15 +61,21 @@ resource "aws_route_table_association" "public" {
 # (例: 2 public + 3 private) で association が index 不一致で失敗していた。
 # NAT 自体は public subnet (= public AZ) ごとにしか置けないので、private subnet[i] の egress は
 # NAT[i % length(public_subnets)] に向ける (round-robin で AZ-locality を維持)。
+#
+# 防御: enable_nat_gateway=true + public_subnets=[] の組み合わせは variables.tf 側の validation で
+# reject される。ただし validation を回避された場合に div-by-zero しないよう、modulo 部分を
+# `max(1, ...)` でも保護する (NAT 不在時は route block 自体が生成されないので実際には到達しない)。
 resource "aws_route_table" "private" {
   count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.private_subnets)) : 1
   vpc_id = aws_vpc.this.id
 
   dynamic "route" {
-    for_each = var.enable_nat_gateway ? [1] : []
+    # NAT が 0 個 (public_subnets=[]) なら route block を生成しない (default route 無し)。
+    # 通常運用では variables.tf 側 validation で先に止まる。
+    for_each = var.enable_nat_gateway && length(aws_nat_gateway.this) > 0 ? [1] : []
     content {
       cidr_block     = "0.0.0.0/0"
-      nat_gateway_id = aws_nat_gateway.this[count.index % length(aws_nat_gateway.this)].id
+      nat_gateway_id = aws_nat_gateway.this[count.index % max(1, length(aws_nat_gateway.this))].id
     }
   }
 

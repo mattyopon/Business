@@ -231,15 +231,18 @@ resource "google_compute_security_policy" "main" {
   description = "Cloud Armor policy TEMPLATE (must be attached to a backend_service to take effect; see comments above)"
 
   # OWASP マネージドルール (XSS / SQLi)
+  # 2026 時点の Cloud Armor 公式仕様では `evaluatePreconfiguredWaf` (versioned ruleset) を使う。
+  # 旧 `evaluatePreconfiguredExpr('xss-stable')` は legacy 扱いで、policy 作成時に reject される。
+  # ルールセット名はバージョン suffix を含む必要がある (例: xss-v33-stable / sqli-v33-stable)。
   rule {
     action   = "deny(403)"
     priority = 1000
     match {
       expr {
-        expression = "evaluatePreconfiguredExpr('xss-stable')"
+        expression = "evaluatePreconfiguredWaf('xss-v33-stable', {'sensitivity': 1})"
       }
     }
-    description = "Block XSS attacks"
+    description = "Block XSS attacks (Cloud Armor preconfigured WAF v3.3, sensitivity 1)"
   }
 
   rule {
@@ -247,10 +250,10 @@ resource "google_compute_security_policy" "main" {
     priority = 1001
     match {
       expr {
-        expression = "evaluatePreconfiguredExpr('sqli-stable')"
+        expression = "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
       }
     }
-    description = "Block SQL injection"
+    description = "Block SQL injection (Cloud Armor preconfigured WAF v3.3, sensitivity 1)"
   }
 
   # Rate-based (1分1000reqまで)
