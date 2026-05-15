@@ -63,8 +63,11 @@ yarn-error.log
 *.tfstate
 *.tfstate.backup
 *.tfplan
+# 全 .tfvars ファイルを ignore (terraform.tfvars / dev.tfvars / environments/prod.tfvars 等)。
+# サンプル/テンプレートは *.tfvars.example として明示的に許可。
+*.tfvars
 *.auto.tfvars
-terraform.tfvars
+!*.tfvars.example
 crash.log
 override.tf
 override.tf.json
