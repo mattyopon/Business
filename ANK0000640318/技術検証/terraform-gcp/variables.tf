@@ -43,7 +43,14 @@ variable "bastion_cidr" {
     # 2) プレフィックス長チェック: /24 以上の narrow な範囲に限定
     #    /24 (256 IP) は踏み台サブネットとして実用上の上限。/25, /26, /27, /28 が一般的な踏み台サイズ。
     #    /23 以下のサイズ (/8, /16 等) は禁止。これにより 10.0.0.0/8 / 10.1.0.0/16 / 10.0.0.0/9 等を全てブロック。
-    condition     = tonumber(split("/", var.bastion_cidr)[1]) >= 24
+    #
+    # 注: Terraform の variable validation は各 validation ブロックが独立評価される。
+    #      たとえ前の validation で形式不正 (foo / 10.0.0.0/x) を弾いていても、
+    #      この条件式が直接 var.bastion_cidr を split/tonumber するとそこで先に panic する
+    #      ("Invalid index" 等の生エラーが出てしまう)。
+    #      try() で全体を包み、評価が失敗した場合は false を返してこの validation も失敗扱いに
+    #      する。形式不正自体の正しいエラーメッセージは validation 1) (cidrhost ベース) が出す。
+    condition     = try(tonumber(split("/", var.bastion_cidr)[1]) >= 24, false)
     error_message = "bastion_cidr must have prefix length /24 or longer (smaller subnet). Wide ranges such as /8, /9, /16, /20, /23 reopen the GKE master endpoint and are forbidden."
   }
 
