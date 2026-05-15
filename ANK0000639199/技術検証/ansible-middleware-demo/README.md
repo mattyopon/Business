@@ -92,6 +92,10 @@ ansible-middleware-demo/
 ```bash
 cd terraform
 
+# tfvars 準備 (環境固有値・実 ARN を含むため、リポジトリには .example のみコミット)
+cp environments/dev.tfvars.example environments/dev.tfvars
+# エディタで environments/dev.tfvars を開き、自環境の値 (key_name, ssh_allowed_cidrs 等) に置換
+
 # 初期化
 terraform init
 
@@ -104,6 +108,8 @@ terraform apply -var-file=environments/dev.tfvars
 # 出力確認（Ansible用のホスト情報）
 terraform output -json > ../ansible/inventory/terraform_outputs.json
 ```
+
+> `environments/<env>.tfvars` はリポジトリの .gitignore 対象 (`*.tfvars` ignore + `*.tfvars.example` 除外)。`.example` 版のみコミットして設定ガイドとして共有する。
 
 ### 2. ミドルウェア設定（Ansible）
 
