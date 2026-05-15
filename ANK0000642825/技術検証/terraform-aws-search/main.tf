@@ -167,10 +167,11 @@ data "aws_caller_identity" "current" {}
 resource "aws_iam_role" "opensearch_master" {
   name = "${var.project_name}-opensearch-master"
 
-  # opensearch_master_trusted_role_arns が空のときは、本ロールに対する AssumeRole を許可しない
-  # placeholder ロール (どこからも assume できない死蔵ロール) として作る。
-  # 空 list を渡す ⇒ Principal を存在しない自己 ARN にして全プリンシパルから AssumeRole 不能化。
-  # ARN を埋めた段階で正規の信頼関係 (明示列挙) に切り替わる。
+  # `var.opensearch_master_trusted_role_arns` は variables.tf 側で
+  # `length(...) > 0` の validation を強制しているため、ここに到達する時点で必ず非空。
+  # 非存在 ARN を Principal に書くと IAM が apply 時に "Invalid principal in policy" で
+  # 弾くため、placeholder ARN を使うアプローチは取れない (Codex 10th review 指摘)。
+  # よってデフォルト値を持たせず「明示的な信頼 ARN の列挙」を強制する設計に揃えている。
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -179,11 +180,7 @@ resource "aws_iam_role" "opensearch_master" {
         Effect = "Allow"
         Action = "sts:AssumeRole"
         Principal = {
-          # 空 list の場合: 「自分自身の ARN」のみ列挙 (循環参照を避けるため固定 placeholder ARN)。
-          #   こうすることで、いかなる現実のプリンシパルからの sts:AssumeRole も通らない
-          #   (validation で root は除外済みのため、ここに root が混ざることはない)。
-          # 非空 list の場合: 渡された ARN を信頼するプリンシパルとして列挙。
-          AWS = length(var.opensearch_master_trusted_role_arns) > 0 ? var.opensearch_master_trusted_role_arns : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/__OPENSEARCH_MASTER_NOT_CONFIGURED__"]
+          AWS = var.opensearch_master_trusted_role_arns
         }
         Condition = {
           StringEquals = {

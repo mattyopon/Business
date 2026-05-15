@@ -94,9 +94,13 @@ variable "log_retention_days" {
 # 実行ロール ARN のみを列挙する。
 # -----------------------------------------------------------------------------
 variable "opensearch_master_trusted_role_arns" {
-  description = "List of IAM role/user ARNs allowed to AssumeRole into opensearch_master. Must enumerate operator roles (e.g., IAM Identity Center admin role) and Lambda execution roles explicitly; cross-account root principals are not allowed."
+  description = "List of IAM role/user ARNs allowed to AssumeRole into opensearch_master. **Required (no default).** Must enumerate operator roles (e.g., IAM Identity Center admin role) and Lambda execution roles explicitly; cross-account root principals are not allowed. Variable has no default so deployments without an explicit list fail at plan time rather than silently creating an unusable role or a role open to any in-account principal."
   type        = list(string)
-  default     = []
+
+  validation {
+    condition     = length(var.opensearch_master_trusted_role_arns) > 0
+    error_message = "opensearch_master_trusted_role_arns must contain at least one entry. Specify the operator role (e.g., IAM Identity Center admin role ARN) and/or Lambda execution role ARNs that are allowed to administer the OpenSearch domain."
+  }
 
   validation {
     condition = alltrue([
