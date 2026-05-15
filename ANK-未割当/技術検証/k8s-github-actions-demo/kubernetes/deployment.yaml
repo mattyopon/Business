@@ -35,8 +35,14 @@ spec:
 
       containers:
       - name: demo-app
+        # 初期値は kustomize/CI 側で `ghcr.io/<owner>/demo-app:<sha>` に bump される。
+        # ローカル Minikube だけで動かす場合は `make local-build` 等で `demo-app:latest` を
+        # クラスタにロードし、本マニフェストの `image:` をその値に書き換えること。
         image: demo-app:latest
-        imagePullPolicy: Never  # Minikubeでローカルイメージを使用
+        # imagePullPolicy:
+        #   - GHCR / ECR / GAR 等のレジストリから取得する CI 経由デプロイ → `IfNotPresent` (本設定)
+        #   - Minikube ローカルビルドだけで動かす場合 → `Never` に書き換える
+        imagePullPolicy: IfNotPresent
 
         # ポート設定
         ports:

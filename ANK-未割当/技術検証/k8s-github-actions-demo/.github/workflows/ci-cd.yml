@@ -6,6 +6,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_deploy:
+        description: "Run the deploy job (requires self-hosted runner or kubeconfig pre-setup)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
@@ -78,21 +87,33 @@ jobs:
         with:
           sarif_file: trivy.sarif
 
+  # NOTE: 本ジョブは「自己ホストランナー (Minikube/kind 起動済み) 上、または
+  #       workflow_dispatch + RUN_DEPLOY=true で明示実行する」想定。
+  #       GitHub-hosted runner (ubuntu-latest) 上では kubectl/cluster が存在せず必ず失敗するため、
+  #       push トリガーでの自動実行は **しない**。
+  #
+  #       実プロジェクトでは ArgoCD/Flux 経由の GitOps を採用し、本ステップを manifest repo
+  #       (kustomize image bump → PR) 更新に置き換えることを強く推奨する。
   deploy:
     runs-on: ubuntu-latest
     needs: scan
-    if: github.ref == 'refs/heads/main'
+    # 自己ホストランナーが用意できない CI 環境ではデフォルトで実行しない。
+    # 明示実行: gh workflow run ci-cd.yml -f run_deploy=true
+    if: github.event_name == 'workflow_dispatch' && inputs.run_deploy == 'true'
     steps:
       - uses: actions/checkout@v4
-      - name: Apply manifests (Minikube ローカル想定 - 本番は GitOps 推奨)
+      - name: Apply manifests
         run: |
-          # 本デモは雛形のため、CI runner 上の Minikube に kubectl apply する想定。
-          # 実プロジェクトでは ArgoCD/Flux 経由の GitOps を採用し、本ステップを manifest repo 更新に置き換えること。
-          if command -v kubectl >/dev/null && kubectl cluster-info >/dev/null 2>&1; then
-            kubectl apply -f "${DEMO_ROOT}/kubernetes/"
-            kubectl set image deployment/demo-app demo-app=${IMAGE_NAME}:${{ github.sha }}
-            kubectl rollout status deployment/demo-app --timeout=180s
-          else
-            echo "::warning::kubectl/cluster が利用不可。本ステップは雛形のため、Minikube/kind を CI runner にセットアップして再実行してください。"
+          # 前提: 自己ホストランナーまたは外部クラスタへの kubeconfig を本ジョブで設定済みであること。
+          # 本ファイルにそのセットアップは含めない (チーム固有のクラスタアクセス方式に依存)。
+          if ! command -v kubectl >/dev/null; then
+            echo "::error::kubectl が見つからない。本ステップは自己ホストランナー or kubectl 事前セットアップ必須。" >&2
             exit 1
           fi
+          if ! kubectl cluster-info >/dev/null 2>&1; then
+            echo "::error::kubectl cluster-info が失敗。kubeconfig がランナー上に設定されているか確認すること。" >&2
+            exit 1
+          fi
+          kubectl apply -f "${DEMO_ROOT}/kubernetes/"
+          kubectl set image deployment/demo-app demo-app=${IMAGE_NAME}:${{ github.sha }}
+          kubectl rollout status deployment/demo-app --timeout=180s
