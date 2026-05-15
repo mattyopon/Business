@@ -20,6 +20,7 @@ permissions:
   contents: read
   packages: write
   id-token: write
+  security-events: write # github/codeql-action/upload-sarif で Trivy SARIF を Security tab に上げるため必須
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/demo-app

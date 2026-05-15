@@ -13,16 +13,31 @@ route:
       receiver: 'pager'
 
 receivers:
+  # 注: alertmanager コンテナ内部の `localhost` は Alertmanager 自身を指すため、
+  #     `localhost:5001` は届かない。本デモでは Alertmanager の正規ログのみで配送検証する
+  #     `null` receiver (webhook_configs を持たない) をデフォルトにしてある。
+  #     実プロジェクトでは下記コメントを参考に Slack / PagerDuty / Email / Webhook を実装し、
+  #     必要に応じて docker-compose に webhook 受け先のコンテナを追加すること。
+  #     例: prom/webhook-logger や `webhook-receiver` を `host: receiver:5001` で listen させる。
   - name: 'default'
-    # ローカル検証用にログのみ。実プロジェクトでは Slack / PagerDuty / Email 等を実装すること。
-    webhook_configs:
-      - url: 'http://localhost:5001/'
-        send_resolved: true
+    # webhook_configs を空にすると Alertmanager は配送せずに resolve だけする。
+    # ローカルでログを見たい場合は docker-compose に下記のような webhook-receiver を追加し:
+    #   webhook-receiver:
+    #     image: ghcr.io/prometheus-community/webhook-logger:latest
+    #     ports: ["5001:5001"]
+    # 下記コメントを外して `webhook-receiver:5001` を指す。
+    # webhook_configs:
+    #   - url: 'http://webhook-receiver:5001/'
+    #     send_resolved: true
 
   - name: 'pager'
-    webhook_configs:
-      - url: 'http://localhost:5001/critical'
-        send_resolved: true
+    # critical 用 receiver も同様にローカル検証時は webhook-receiver コンテナ追加が必要。
+    # 実プロジェクトでは PagerDuty integration key を使った pagerduty_configs に置き換える:
+    #   pagerduty_configs:
+    #     - service_key: '${PAGERDUTY_SERVICE_KEY}'
+    # webhook_configs:
+    #   - url: 'http://webhook-receiver:5001/critical'
+    #     send_resolved: true
 
 inhibit_rules:
   - source_matchers:

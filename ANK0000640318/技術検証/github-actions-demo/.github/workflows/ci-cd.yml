@@ -79,7 +79,8 @@ jobs:
     outputs:
       # 単一の tag を Trivy に渡せるよう、SHA tag だけを別途出力する。
       # `steps.meta.outputs.tags` は newline 区切りの list を返すため、image-ref に直渡しすると Trivy が parse 失敗する。
-      image_uri_sha: ${{ steps.meta.outputs.image_ref_sha }}
+      # 注: 値の出所は **後段の extract_sha_tag step** (この step 自身ではない)。
+      image_uri_sha: ${{ steps.extract_sha_tag.outputs.image_ref_sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -125,6 +126,16 @@ jobs:
     needs: build
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.enable_full_pipeline == 'true' }}
     steps:
+      # private GAR からの pull に備え、build と同じ WIF 認証 + docker config を scan jobでも実施する。
+      # build job の認証は同一 runner にしか残らないため、scan は別 runner で再認証が必須。
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+      - run: gcloud auth configure-docker ${REGISTRY}
+
       # Action は再現性確保のためタグ pin する (master 参照は禁止)。
       - uses: aquasecurity/trivy-action@0.24.0
         with:
