@@ -153,21 +153,37 @@ resource "aws_cloudwatch_log_group" "opensearch" {
 data "aws_caller_identity" "current" {}
 
 # OpenSearch FGAC master_user として使う IAM Role
-# 重要: Trust に `es.amazonaws.com` だけを書くと、運用者 / Lambda どちらも AssumeRole できず管理不能になる。
-# 実運用では IAM Identity Center 経由の運用ロール ARN と、検索 / 投入用 Lambda 実行ロール ARN を Principal.AWS に列挙する。
-# 本デモでは「同一アカウント内の任意の IAM プリンシパル」を `aws:PrincipalAccount` 条件で許容し、外部からの AssumeRole を防ぐ最小構成にしている。
+#
+# 重要 (privilege escalation 対策):
+#   - 以前は `Principal.AWS = "arn:aws:iam::<account>:root"` で同一アカウント内を広く信頼していたが、
+#     これだと **同一アカウント内で `sts:AssumeRole` 権限を持つ任意のプリンシパル** がこのロールを
+#     AssumeRole して OpenSearch superuser に昇格可能だった。
+#   - 修正後: `var.opensearch_master_trusted_role_arns` で AssumeRole 可能な ARN を **明示列挙** する。
+#     運用ロール (IAM Identity Center 経由の管理者ロール) と、検索 / 投入用 Lambda 実行ロール ARN を
+#     列挙する想定。空 list の場合は本ロールへの AssumeRole 経路を一切作らない (デモ最小構成)。
+#   - 入力 ARN は variables.tf 側の validation で `root` 不可・`arn:aws:iam::<account>:(role|user)/` 形式に限定。
+#
+# 注意: Trust に `es.amazonaws.com` を書く必要はない (これは domain access policy 側の話)。
 resource "aws_iam_role" "opensearch_master" {
   name = "${var.project_name}-opensearch-master"
 
+  # opensearch_master_trusted_role_arns が空のときは、本ロールに対する AssumeRole を許可しない
+  # placeholder ロール (どこからも assume できない死蔵ロール) として作る。
+  # 空 list を渡す ⇒ Principal を存在しない自己 ARN にして全プリンシパルから AssumeRole 不能化。
+  # ARN を埋めた段階で正規の信頼関係 (明示列挙) に切り替わる。
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowAccountPrincipalsToAssume"
+        Sid    = "AllowExplicitlyEnumeratedPrincipalsToAssume"
         Effect = "Allow"
         Action = "sts:AssumeRole"
         Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+          # 空 list の場合: 「自分自身の ARN」のみ列挙 (循環参照を避けるため固定 placeholder ARN)。
+          #   こうすることで、いかなる現実のプリンシパルからの sts:AssumeRole も通らない
+          #   (validation で root は除外済みのため、ここに root が混ざることはない)。
+          # 非空 list の場合: 渡された ARN を信頼するプリンシパルとして列挙。
+          AWS = length(var.opensearch_master_trusted_role_arns) > 0 ? var.opensearch_master_trusted_role_arns : ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/__OPENSEARCH_MASTER_NOT_CONFIGURED__"]
         }
         Condition = {
           StringEquals = {

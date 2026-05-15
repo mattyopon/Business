@@ -84,3 +84,33 @@ variable "log_retention_days" {
   type        = number
   default     = 30
 }
+
+# -----------------------------------------------------------------------------
+# OpenSearch master role trust
+# 信頼するプリンシパル (AssumeRole 可能な IAM ロール / ユーザー) を明示列挙する。
+# 「同一アカウントの root をブランケットで信頼する」設計は、同一アカウント内の任意の
+# 広い sts:AssumeRole 権限を持つプリンシパルが OpenSearch superuser に昇格できるため禁止。
+# 運用ロール (IAM Identity Center 経由の管理者ロール ARN) と、検索 / 投入用 Lambda
+# 実行ロール ARN のみを列挙する。
+# -----------------------------------------------------------------------------
+variable "opensearch_master_trusted_role_arns" {
+  description = "List of IAM role/user ARNs allowed to AssumeRole into opensearch_master. Must enumerate operator roles (e.g., IAM Identity Center admin role) and Lambda execution roles explicitly; cross-account root principals are not allowed."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for a in var.opensearch_master_trusted_role_arns :
+      can(regex("^arn:aws:iam::[0-9]{12}:(role|user)/", a))
+    ])
+    error_message = "Each entry of opensearch_master_trusted_role_arns must be a fully-qualified IAM role or user ARN (arn:aws:iam::<account>:role/<name> or arn:aws:iam::<account>:user/<name>)."
+  }
+
+  validation {
+    condition = alltrue([
+      for a in var.opensearch_master_trusted_role_arns :
+      !can(regex(":root$", a))
+    ])
+    error_message = "Account-root principals (arn:aws:iam::<account>:root) are not allowed; enumerate specific roles or users to prevent privilege escalation from any in-account principal."
+  }
+}

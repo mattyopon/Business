@@ -56,15 +56,20 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# 多 NAT モード: 1 private subnet ごとに 1 つの route table を作る (private subnet 数を起点)。
+# 旧実装は count を public_subnets 数で計算しており、private subnets > public subnets の構成
+# (例: 2 public + 3 private) で association が index 不一致で失敗していた。
+# NAT 自体は public subnet (= public AZ) ごとにしか置けないので、private subnet[i] の egress は
+# NAT[i % length(public_subnets)] に向ける (round-robin で AZ-locality を維持)。
 resource "aws_route_table" "private" {
-  count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.public_subnets)) : 1
+  count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.private_subnets)) : 1
   vpc_id = aws_vpc.this.id
 
   dynamic "route" {
     for_each = var.enable_nat_gateway ? [1] : []
     content {
       cidr_block     = "0.0.0.0/0"
-      nat_gateway_id = aws_nat_gateway.this[count.index].id
+      nat_gateway_id = aws_nat_gateway.this[count.index % length(aws_nat_gateway.this)].id
     }
   }
 
