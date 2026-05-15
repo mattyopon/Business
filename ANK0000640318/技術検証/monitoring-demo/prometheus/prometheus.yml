@@ -23,9 +23,13 @@ scrape_configs:
     static_configs:
       - targets: ['node-exporter:9100']
 
-  - job_name: cadvisor
-    static_configs:
-      - targets: ['cadvisor:8080']
+  # cadvisor scrape: docker-compose.yml に cadvisor サービスが含まれていないため、
+  # 同サービスを追加するまでスクレイプターゲットもコメントアウト。
+  # 実プロジェクトで `gcr.io/cadvisor/cadvisor:v0.49.1` 等を compose に追加した時点で
+  # 下記ブロックを有効化する。
+  # - job_name: cadvisor
+  #   static_configs:
+  #     - targets: ['cadvisor:8080']
 
   # payment-api scrape: ./app と payment-api コンテナは雛形未同梱 (docker-compose.yml で
   # 該当サービスはコメントアウト)。スクレイプ先が存在しないため、本ターゲットも合わせて

@@ -23,7 +23,13 @@ permissions:
   security-events: write # github/codeql-action/upload-sarif で Trivy SARIF を Security tab に上げるため必須
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/demo-app
+  # GHCR は repository name component が lowercase 必須。
+  # `github.repository_owner` は表示ケースを保持するため、大文字を含む owner では
+  # `docker push` も `kubectl set image` も "invalid reference format" で失敗する。
+  # IMAGE_NAME は build job 内の docker/metadata-action で lowercase 化したものを使う
+  # (本変数はレジストリホスト + repository 名の base path のみ提供。完全な image_ref は build job の output から取る)。
+  IMAGE_REGISTRY: ghcr.io
+  IMAGE_NAME_BASE: demo-app
   NODE_VERSION: '20'
   # 本デモのルートディレクトリ。案件 ID を含むパスを直に書くと「コピーして案件番号を書き換える」運用で CI が壊れるため、
   # 変数経由でしか参照しない。新案件へコピーする際は本変数のみ書き換えれば全 job が追従する。
@@ -53,8 +59,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     if: github.event_name != 'pull_request'
+    outputs:
+      image_ref: ${{ steps.image_ref.outputs.value }}
     steps:
       - uses: actions/checkout@v4
+      - id: image_ref
+        # GHCR は repository name 部分が lowercase 必須。owner を tr で小文字化する。
+        # 結果は `<registry>/<owner-lower>/<image>:<sha>` の完全 image reference。
+        run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REF="${IMAGE_REGISTRY}/${OWNER_LOWER}/${IMAGE_NAME_BASE}:${{ github.sha }}"
+          echo "value=${REF}" >> "$GITHUB_OUTPUT"
+          echo "Using image reference: ${REF}"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -65,7 +81,7 @@ jobs:
         with:
           context: ${{ env.DEMO_ROOT }}/app
           push: true
-          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          tags: ${{ steps.image_ref.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -73,10 +89,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      # GHCR private package を pull するため scan job 側でも GHCR ログイン必須
+      # (build job の docker config は同 runner にしか残らないため別 runner では再ログインが要る)
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       # Action は再現性確保のためタグ pin する (Codex 指摘 #5 への対応)
       - uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          image-ref: ${{ needs.build.outputs.image_ref }}
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
@@ -88,16 +111,20 @@ jobs:
         with:
           sarif_file: trivy.sarif
 
-  # NOTE: 本ジョブは「自己ホストランナー (Minikube/kind 起動済み) 上、または
-  #       workflow_dispatch + RUN_DEPLOY=true で明示実行する」想定。
+  # NOTE: 本ジョブは「自己ホストランナー (Minikube/kind 起動済み) 上」での実行を想定。
   #       GitHub-hosted runner (ubuntu-latest) 上では kubectl/cluster が存在せず必ず失敗するため、
-  #       push トリガーでの自動実行は **しない**。
+  #       `runs-on` を self-hosted ラベルに切替えている。push トリガーでの自動実行はしない
+  #       (workflow_dispatch + run_deploy=true 限定)。
   #
   #       実プロジェクトでは ArgoCD/Flux 経由の GitOps を採用し、本ステップを manifest repo
   #       (kustomize image bump → PR) 更新に置き換えることを強く推奨する。
   deploy:
-    runs-on: ubuntu-latest
-    needs: scan
+    # 自己ホストランナーのラベル例: ["self-hosted", "kubernetes-demo"]
+    # チームで用意した self-hosted runner にラベルを合わせて起動する。
+    # 自己ホストランナーが無い CI 環境では runs-on の解決自体に失敗するため、
+    # `runs-on: ubuntu-latest` への一時切替えは禁止 (kubectl cluster-info が確実に落ちる)。
+    runs-on: [self-hosted, kubernetes-demo]
+    needs: [build, scan]
     # 自己ホストランナーが用意できない CI 環境ではデフォルトで実行しない。
     # 明示実行: gh workflow run ci-cd.yml -f run_deploy=true
     if: github.event_name == 'workflow_dispatch' && inputs.run_deploy == 'true'
@@ -116,5 +143,6 @@ jobs:
             exit 1
           fi
           kubectl apply -f "${DEMO_ROOT}/kubernetes/"
-          kubectl set image deployment/demo-app demo-app=${IMAGE_NAME}:${{ github.sha }}
+          # build job が lowercase 化した完全な image_ref を再利用 (大文字 owner でも壊れない)。
+          kubectl set image deployment/demo-app demo-app="${{ needs.build.outputs.image_ref }}"
           kubectl rollout status deployment/demo-app --timeout=180s
