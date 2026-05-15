@@ -25,9 +25,18 @@ chmod +x run-pipeline.sh
 
 ## Option 2: Manual Steps
 
+### 0. Bootstrap .env (compose 起動必須)
+
+```bash
+cp .env.example .env
+# JUPYTER_TOKEN を強い値に置換 (例: openssl rand -hex 24)
+```
+
+`docker-compose.yml` は `${JUPYTER_TOKEN:?...}` で必須化済み。`.env` がないと compose は即失敗する。
+
 ### 1. Start Services
 ```bash
-docker-compose up -d
+docker-compose --env-file .env up -d
 ```
 
 Wait 10-15 seconds for services to initialize.

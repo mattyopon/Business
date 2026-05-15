@@ -13,8 +13,15 @@ Get the SRE Monitoring Demo running in 5 minutes!
 # Navigate to project directory
 cd /path/to/sre-monitoring-demo
 
-# Start all services
-docker-compose up -d
+# Bootstrap .env (Grafana 認証情報など compose 起動必須変数)
+# docker-compose.yml で ${GF_SECURITY_ADMIN_PASSWORD:?...} を必須化済みのため、.env が無いと起動失敗。
+cp .env.example .env
+# .env を編集して強いパスワードに変更 (例: GF_SECURITY_ADMIN_PASSWORD=$(openssl rand -base64 32))
+
+# Start all services (簡易ラッパー: .env が無ければ自動生成)
+./start.sh
+# または手動で:
+#   docker-compose --env-file .env up -d
 
 # Wait for services to initialize (about 30 seconds)
 
@@ -26,7 +33,7 @@ docker-compose ps
 
 1. **Grafana Dashboard** (Main Interface)
    - URL: http://localhost:3000
-   - Login: `admin` / `admin`
+   - Login: `.env` で設定した `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`
    - Go to: Dashboards → Browse → "SRE Monitoring - System Overview"
 
 2. **Prometheus UI** (Metrics Explorer)
