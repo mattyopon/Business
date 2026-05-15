@@ -15,34 +15,33 @@
 - **セキュリティ**: WAF、セキュリティグループ、IAMロール
 - **監視**: CloudWatch、SNS アラート
 
-## ディレクトリ構成
+## ディレクトリ構成（実体）
+
+本デモでは下記の最小構成のみを同梱しており、`environments/prod/`、`modules/s3/`、`modules/monitoring/`、`docs/architecture.md` は未同梱。本案件で必要となった段階で順次追加する想定。
 
 ```
 terraform-aws-infra/
 ├── README.md
 ├── environments/
-│   ├── dev/
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── terraform.tfvars
-│   └── prod/
+│   └── dev/                # 同梱
 │       ├── main.tf
-│       ├── variables.tf
-│       └── terraform.tfvars
-├── modules/
-│   ├── vpc/
-│   ├── eks/
-│   ├── aurora/
-│   ├── s3/
-│   └── monitoring/
-└── docs/
-    └── architecture.md
+│       └── variables.tf    # terraform.tfvars は秘匿想定のため同梱外
+└── modules/
+    ├── vpc/                # 同梱 (main.tf)
+    ├── eks/                # 同梱 (main.tf)
+    └── aurora/             # 同梱 (main.tf)
 ```
+
+> 拡張ロードマップ（同梱外、案件参画時に追加）:
+> - `environments/prod/` — 本番向けパラメータ・remote state backend を別途追加
+> - `modules/s3/` — 監査ログバケット (Object Lock / Glacier ライフサイクル / KMS CMK)
+> - `modules/monitoring/` — CloudWatch Logs / Metrics / SNS / EventBridge の集中設定
+> - `docs/architecture.md` — 構成図・ADR・データフロー
 
 ## クイックスタート
 
 ```bash
-# 1. 初期化
+# 1. 初期化（同梱されている dev 環境を起点に検証する）
 cd environments/dev
 terraform init
 

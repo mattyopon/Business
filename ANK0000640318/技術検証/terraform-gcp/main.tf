@@ -88,12 +88,26 @@ resource "google_container_cluster" "main" {
     services_secondary_range_name = "services"
   }
 
-  # Master Authorized Networks (運用元 / 踏み台 / IAP から)
+  # Master Authorized Networks
+  # 設計書 01_インフラ設計書.md 「3.x 踏み台・IAP 経由アクセス」と整合させ、
+  # 10.0.0.0/8 のような広域指定は禁止。以下に限定する:
+  #   - 踏み台ホストサブネット (Bastion): variables 経由で個別 CIDR を渡す
+  #   - IAP TCP forwarding range (Google 管理): 35.235.240.0/20 (固定)
   master_authorized_networks_config {
     cidr_blocks {
-      cidr_block   = "10.0.0.0/8"
-      display_name = "internal-ops"
+      cidr_block   = var.bastion_cidr
+      display_name = "bastion-host"
     }
+    cidr_blocks {
+      cidr_block   = "35.235.240.0/20"
+      display_name = "google-iap-tcp-forwarding"
+    }
+  }
+
+  # Binary Authorization (設計書 01_インフラ設計書.md 「4.1 GKE Autopilot」と整合)
+  # 信頼できるコンテナイメージのみ deploy を許可するため、プロジェクト既定ポリシーを強制
+  binary_authorization {
+    evaluation_mode = "PROJECT_SINGLETON_POLICY_ENFORCE"
   }
 
   # リリースチャンネル (Autopilot は REGULAR/STABLE が選べる)
@@ -131,8 +145,8 @@ resource "google_sql_database_instance" "main" {
   depends_on = [google_service_networking_connection.private_vpc_connection]
 
   settings {
-    tier              = "db-custom-4-16384"   # 設計書 5.1 と整合 (4 vCPU / 16GB RAM)
-    availability_type = "REGIONAL"            # 高可用性
+    tier              = "db-custom-4-16384" # 設計書 5.1 と整合 (4 vCPU / 16GB RAM)
+    availability_type = "REGIONAL"          # 高可用性
 
     backup_configuration {
       enabled                        = true
@@ -140,7 +154,7 @@ resource "google_sql_database_instance" "main" {
       start_time                     = "03:00"
       location                       = var.region
       backup_retention_settings {
-        retained_backups = 30   # 設計書 7.3 と整合 (30日保持)
+        retained_backups = 30 # 設計書 7.3 と整合 (30日保持)
       }
     }
 
@@ -160,7 +174,7 @@ resource "google_sql_database_instance" "main" {
     }
 
     maintenance_window {
-      day          = 7  # Sunday
+      day          = 7 # Sunday
       hour         = 3
       update_track = "stable"
     }
@@ -233,8 +247,8 @@ resource "google_compute_security_policy" "main" {
         count        = 1000
         interval_sec = 60
       }
-      conform_action = "allow"
-      exceed_action  = "deny(429)"
+      conform_action   = "allow"
+      exceed_action    = "deny(429)"
       ban_duration_sec = 600
     }
     description = "Rate limit per source IP"
@@ -262,7 +276,7 @@ resource "google_spanner_instance" "main" {
   name             = "${var.project_name}-spanner"
   display_name     = "${var.project_name}-spanner"
   config           = "regional-${var.region}"
-  processing_units = 3000  # 3 node 相当 (設計書 5.2 と整合: ノード数 3)
+  processing_units = 3000 # 3 node 相当 (設計書 5.2 と整合: ノード数 3)
   project          = var.project_id
 
   labels = {

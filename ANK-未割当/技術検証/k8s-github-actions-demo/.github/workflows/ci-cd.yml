@@ -15,13 +15,17 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/demo-app
   NODE_VERSION: '20'
+  # 本デモのルートディレクトリ。案件 ID を含むパスを直に書くと「コピーして案件番号を書き換える」運用で CI が壊れるため、
+  # 変数経由でしか参照しない。新案件へコピーする際は本変数のみ書き換えれば全 job が追従する。
+  # 例: ANK0000642825/技術検証/k8s-github-actions-demo
+  DEMO_ROOT: ANK-未割当/技術検証/k8s-github-actions-demo
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ANK-未割当/技術検証/k8s-github-actions-demo/app
+        working-directory: ${{ env.DEMO_ROOT }}/app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +42,7 @@ jobs:
     if: github.event_name != 'pull_request'
     defaults:
       run:
-        working-directory: ANK-未割当/技術検証/k8s-github-actions-demo
+        working-directory: ${{ env.DEMO_ROOT }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -49,7 +53,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v5
         with:
-          context: ANK-未割当/技術検証/k8s-github-actions-demo/app
+          context: ${{ env.DEMO_ROOT }}/app
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
@@ -85,7 +89,7 @@ jobs:
           # 本デモは雛形のため、CI runner 上の Minikube に kubectl apply する想定。
           # 実プロジェクトでは ArgoCD/Flux 経由の GitOps を採用し、本ステップを manifest repo 更新に置き換えること。
           if command -v kubectl >/dev/null && kubectl cluster-info >/dev/null 2>&1; then
-            kubectl apply -f ANK-未割当/技術検証/k8s-github-actions-demo/kubernetes/
+            kubectl apply -f "${DEMO_ROOT}/kubernetes/"
             kubectl set image deployment/demo-app demo-app=${IMAGE_NAME}:${{ github.sha }}
             kubectl rollout status deployment/demo-app --timeout=180s
           else

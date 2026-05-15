@@ -421,12 +421,16 @@ spec:
 
 ### 4.2 Sync戦略
 
-| 戦略 | 用途 | 設定 |
-|------|------|------|
-| 自動Sync | Staging | automated: true |
-| 手動Sync | Production | automated: false |
-| セルフヒール | 全環境 | selfHeal: true |
-| Prune | 全環境 | prune: true |
+本案件では **本番デプロイの「承認」は GitHub Actions の environment 承認で行い、その後の ArgoCD への反映は CI が自動で `argocd app sync` を実行する**「承認は手動 / sync は自動」ハイブリッドモデルを採用する。ArgoCD Application 側は automated/selfHeal を有効にし、マニフェスト repo との差分検出時の自動収束を期待する。
+
+| 戦略 | 用途 | ArgoCD Application 設定 | CI からの sync 実行 |
+|------|------|----------------------|---------------------|
+| 自動Sync (承認後) | Production (本番) | `automated.prune: true`, `automated.selfHeal: true` | あり (GitHub environment "production" の手動承認通過後、`argocd app sync` を CI が実行) |
+| 自動Sync (常時) | Staging | `automated.prune: true`, `automated.selfHeal: true` | なし (マニフェスト push のみ。ArgoCD が pull で適用) |
+| カナリア Sync | production-canary | `automated.prune: true`, `automated.selfHeal: true` | あり (CI が canary 専用 manifest を bump し sync。エラー率閾値で自動 abort) |
+| Prune | 全環境 | `prune: true` | - |
+
+> 過去レビューで「本番が手動 Sync (automated: false) なのか自動 Sync なのかが資料間で矛盾している」との指摘があったため、本書では **自動 Sync + 承認は GitHub environment** に一本化する。CI ワークフロー (`.github/workflows/cd-production.yml`) と ArgoCD Application マニフェスト (`payment-prod` Application の `syncPolicy.automated`) はこの方針で揃えること。手動 Sync を希望するシステム/環境がある場合は、別途 ADR で例外として明示する。
 
 ---
 

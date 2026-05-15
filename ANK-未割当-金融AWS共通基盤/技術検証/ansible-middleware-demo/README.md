@@ -163,13 +163,15 @@ output "ansible_inventory" {
 
 ### ロール構成
 
-| ロール | 説明 | 対象 |
-|--------|------|------|
-| `common` | 共通設定（タイムゾーン、パッケージ、ユーザー） | 全サーバー |
-| `nginx` | Nginx インストール・設定 | Web サーバー |
-| `docker` | Docker CE インストール・設定 | App サーバー |
-| `node_exporter` | Prometheus Node Exporter | 全サーバー |
-| `fluentd` | ログ収集エージェント | 全サーバー |
+本デモでは Fluent Bit (DaemonSet 構成) によるログ収集を Kubernetes 案件側で扱う前提とし、**Ansible のロールとしては `fluentd` role を同梱していない**。EC2 系で `fluentd` をホスト側に Ansible で配るユースケースが必要な場合は、別ブランチで `roles/fluentd/` を追加する想定。
+
+| ロール | 説明 | 対象 | 同梱状況 |
+|--------|------|------|----------|
+| `common` | 共通設定（タイムゾーン、パッケージ、ユーザー） | 全サーバー | 同梱 (`ansible/roles/common/`) |
+| `nginx` | Nginx インストール・設定 | Web サーバー | 同梱 (`ansible/roles/nginx/`) |
+| `docker` | Docker CE インストール・設定 | App サーバー | 同梱 (`ansible/roles/docker/`) |
+| `node_exporter` | Prometheus Node Exporter | 全サーバー | 同梱 (`ansible/roles/node_exporter/`) |
+| `fluentd` | ログ収集エージェント (EC2 用) | 全サーバー | **同梱外**。本デモでは Kubernetes クラスタ側で Fluent Bit DaemonSet を採用するため、ホスト側 fluentd は対象外 |
 
 ### プレイブック構成
 
@@ -182,7 +184,7 @@ output "ansible_inventory" {
   roles:
     - common
     - node_exporter
-    - fluentd
+    # fluentd role は本デモ同梱外。Fluent Bit を Kubernetes 側で扱う前提。
 
 - name: Configure web servers
   hosts: webservers
@@ -404,9 +406,9 @@ ssh_allow_password: no
 node_exporter_version: "1.7.0"
 node_exporter_port: 9100
 
-# ログ設定
-fluentd_log_path: /var/log
-fluentd_output_host: "{{ lookup('env', 'FLUENTD_OUTPUT_HOST') | default('localhost') }}"
+# ログ設定 (本デモでは fluentd role 同梱外。下記変数は将来 roles/fluentd/ を追加する場合の参考値)
+# fluentd_log_path: /var/log
+# fluentd_output_host: "{{ lookup('env', 'FLUENTD_OUTPUT_HOST') | default('localhost') }}"
 ```
 
 ### group_vars/webservers.yml

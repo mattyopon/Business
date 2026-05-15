@@ -94,8 +94,21 @@ print(client.cluster.health())
 
 ### 2.3 OpenSearch Dashboards
 
+OpenSearch Service の Dashboards に Cognito 連携を行う場合、**User Pool だけでなく Identity Pool と CognitoAccess 用 IAM ロール、OpenSearch ドメインの Cognito 設定をセットで構成する必要がある**（User Pool 単独では Dashboards にアクセスできない）。
+
+| コンポーネント | 役割 | Terraform リソース (例) |
+|--------------|------|------------------------|
+| **Cognito User Pool** | ユーザー認証 (パスワード／SSO / SAML / OIDC IdP)。`auth.your-domain.com` のホストドメイン (User Pool Domain) を必ず作成 | `aws_cognito_user_pool`, `aws_cognito_user_pool_domain` |
+| **Cognito Identity Pool** | User Pool で認証された identity に AWS の一時クレデンシャルを払い出す。Dashboards から OpenSearch API を叩く際に **必須** | `aws_cognito_identity_pool`, `aws_cognito_identity_pool_roles_attachment` |
+| **CognitoAccess (Authenticated) IAM Role** | Identity Pool が払い出す認証済みロール。OpenSearch のドメインアクセスポリシーで principal として許可する | `aws_iam_role` (trust: `cognito-identity.amazonaws.com`, condition: 該当 Identity Pool ID) |
+| **AmazonOpenSearchServiceCognitoAccess IAM Role** | OpenSearch ドメインが Cognito を呼び出すためのサービスロール (AWS マネージドポリシー `AmazonOpenSearchServiceCognitoAccess` を attach) | `aws_iam_role` (trust: `es.amazonaws.com`) |
+| **OpenSearch ドメインの Cognito 設定** | ドメイン側で User Pool ID / Identity Pool ID / 上記サービスロールを指定 | `aws_opensearch_domain.cognito_options` (`enabled = true`, `user_pool_id`, `identity_pool_id`, `role_arn`) |
+| **OpenSearch ドメインアクセスポリシー** | 認証済み IAM ロール (CognitoAccess Authenticated Role) からの `es:ESHttp*` を許可 | `aws_opensearch_domain.access_policies` (Statement で Principal: 認証済みロール ARN) |
+
 - URL: `https://<endpoint>/_dashboards`
-- 認証: Cognito User Pool
+- 認証: 上記 5 コンポーネントすべて構成済みであることを前提とした、Cognito User Pool 経由のフェデレーションログイン
+- FGAC (Fine Grained Access Control) を有効化している場合は、上記の CognitoAccess Authenticated Role を OpenSearch 内部のロール (`all_access` または `kibana_user` 等) にもマッピングする (`/_plugins/_security/api/rolesmapping/<role>` への PUT)
+- 検証参照: `技術検証/terraform-aws-search/main.tf` の `aws_cognito_*` および `aws_opensearch_domain.cognito_options` ブロックと整合させる
 
 ---
 
@@ -104,7 +117,8 @@ print(client.cluster.health())
 ### 3.1 インデックス一覧確認
 
 ```bash
-curl -XGET "https://<endpoint>/_cat/indices?v"
+awscurl --region ap-northeast-1 --service es -XGET "https://<endpoint>/_cat/indices?v"
+# または: curl --aws-sigv4 "aws:amz:ap-northeast-1:es" --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" -XGET "https://<endpoint>/_cat/indices?v"
 ```
 
 ### 3.2 インデックス作成
@@ -128,7 +142,8 @@ PUT /products
 ### 3.3 インデックス削除
 
 ```bash
-curl -XDELETE "https://<endpoint>/products"
+awscurl --region ap-northeast-1 --service es -XDELETE "https://<endpoint>/products"
+# または: curl --aws-sigv4 "aws:amz:ap-northeast-1:es" --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" -XDELETE "https://<endpoint>/products"
 ```
 
 ### 3.4 インデックスライフサイクル管理（ISM）
@@ -170,14 +185,16 @@ PUT /_plugins/_ism/policies/delete_old_logs
 ### 4.1 クラスターヘルス確認
 
 ```bash
+# 前提: 2.2 で説明した SigV4 署名 (awscurl または curl --aws-sigv4) を必ず使う
+
 # クラスター状態
-curl -XGET "https://<endpoint>/_cluster/health?pretty"
+awscurl --region ap-northeast-1 --service es -XGET "https://<endpoint>/_cluster/health?pretty"
 
 # ノード状態
-curl -XGET "https://<endpoint>/_nodes/stats?pretty"
+awscurl --region ap-northeast-1 --service es -XGET "https://<endpoint>/_nodes/stats?pretty"
 
 # シャード状態
-curl -XGET "https://<endpoint>/_cat/shards?v"
+awscurl --region ap-northeast-1 --service es -XGET "https://<endpoint>/_cat/shards?v"
 ```
 
 ### 4.2 主要メトリクス
@@ -298,8 +315,8 @@ POST /_snapshot/my-repo/snapshot-1/_restore
 
 **対処**:
 ```bash
-# 未割り当てシャード確認
-curl -XGET "https://<endpoint>/_cat/shards?v&h=index,shard,prirep,state,unassigned.reason"
+# 未割り当てシャード確認 (SigV4 必須)
+awscurl --region ap-northeast-1 --service es -XGET "https://<endpoint>/_cat/shards?v&h=index,shard,prirep,state,unassigned.reason"
 
 # クラスター再割り当て
 POST /_cluster/reroute?retry_failed=true

@@ -78,17 +78,19 @@ Once all containers are running:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Grafana Dashboard | http://localhost:3000 | admin / admin |
+| Grafana Dashboard | http://localhost:3000 | `.env` で設定した `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`。固定の弱い初期値 (`admin/admin`) は使用禁止 |
 | Prometheus UI | http://localhost:9090 | - |
 | Sample Application | http://localhost:8000 | - |
 | Node Exporter Metrics | http://localhost:9100/metrics | - |
 
 ### First-Time Setup
 
-1. **Access Grafana**: Navigate to http://localhost:3000
-2. **Login**: Use credentials `admin` / `admin`
-3. **View Dashboard**: The "SRE Monitoring - System Overview" dashboard is pre-configured
-4. **Explore Metrics**: Visit Prometheus at http://localhost:9090 to query raw metrics
+1. **Prepare credentials**: `cp .env.example .env` でテンプレートをコピーし、`GF_SECURITY_ADMIN_USER` と `GF_SECURITY_ADMIN_PASSWORD` に強いパスワード（例: `openssl rand -base64 32`）を設定する。`.env` は `.gitignore` 対象。**`admin/admin` のような既定値はそのまま使わない**。
+2. **Start stack**: `docker compose --env-file .env up -d`
+3. **Access Grafana**: Navigate to http://localhost:3000
+4. **Login**: Use the credentials you set in `.env` (not `admin/admin`)
+5. **View Dashboard**: The "SRE Monitoring - System Overview" dashboard is pre-configured
+6. **Explore Metrics**: Visit Prometheus at http://localhost:9090 to query raw metrics
 
 ### Generate Load
 

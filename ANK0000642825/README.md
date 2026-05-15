@@ -53,12 +53,17 @@
 
 ### 主な作業（想定）
 
-- AWS環境における検索システムインフラの設計・構築
-- OpenSearch/Elasticsearchクラスターの構築・チューニング
-- 認証系（Cognito等）やAPI管理（API Gateway）の設計・構築
-- コンテナ管理（ECS/EKS）によるアプリケーション基盤構築
-- ネットワーク設計（VPC、サブネット、セキュリティグループ）
-- ストレージ設計（S3、EBS、EFS）
+本案件のターゲット構成は **API Gateway + Lambda + Cognito + OpenSearch** を中核としたサーバレス検索基盤であり、ECS/EKS 等の常駐コンテナ層は本案件のスコープ外。本書および本案件配下の設計書群はこの方針で統一する。
+
+- AWS 環境における検索システムインフラの設計・構築
+- **OpenSearch** クラスターの構築・チューニング（IAM 認証 / SigV4 / Cognito 連携 / Dashboards / 監査ログ）
+- **Amazon Cognito** (User Pool / Identity Pool / Hosted UI) による認証基盤の設計・構築
+- **Amazon API Gateway** (REST API / WAF 連携 / スロットリング / カスタムオーソライザー) による API 管理
+- **AWS Lambda** (Python / Node.js) による検索フロント処理・データ正規化・OpenSearch 連携
+- ネットワーク設計（VPC、サブネット、セキュリティグループ、Interface/Gateway VPC Endpoint）
+- ストレージ設計（S3、必要に応じて EFS）
+
+> なお、本案件で **ECS / EKS による常駐コンテナ層は採用しない** 方針である。設計書 (`参画用/運用ドキュメント/01_AWSインフラ設計書.md`) および技術検証 (`技術検証/terraform-aws-search/`) もこの方針で揃えている。
 
 ## 環境
 

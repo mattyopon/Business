@@ -98,11 +98,13 @@ ECS Fargate / EKS の常駐アプリ層は本案件のスコープ外 (必要が
 
 ### 4.1 S3バケット
 
-| バケット名 | 用途 | ライフサイクル |
-|-----------|------|--------------|
-| search-prod-logs | アクセスログ | 90日でGlacier |
-| search-prod-backup | バックアップ | 365日で削除 |
-| search-prod-data | 静的データ | なし |
+| バケット名 | 用途 | ライフサイクル | 暗号化 | バージョニング | Object Lock |
+|-----------|------|--------------|--------|--------------|-------------|
+| search-prod-logs | アクセスログ（API Gateway / Lambda / CloudFront 等） | 90日でGlacier | CMK (KMS) | 有効 | なし |
+| search-prod-backup | OpenSearch / Lambda コードのバックアップ | 365日で削除 | CMK (KMS) | 有効 | なし |
+| search-prod-data | 検索データソース（静的データ） | なし | CMK (KMS) | 有効 | なし |
+| **search-prod-audit-logs** | **監査ログ（CloudTrail / Config / OpenSearch 監査ログ / OpenSearch スローログ等）** | **7年保管 (Object Lock Compliance) → 期限満了後削除** | **CMK (KMS)** | **有効** | **Compliance モード / 保持期間 7年** |
+| search-prod-cloudtrail-logs | CloudTrail 専用 (組織トレイル無効案件向け、`search-prod-audit-logs` に集約する場合は本行は省略) | 7年保管 | CMK (KMS) | 有効 | Compliance モード / 7年 |
 
 ### 4.2 S3バケットポリシー
 
@@ -131,7 +133,7 @@ API Gateway / Cognito / CloudFront / KMS / CloudWatch Logs は AWS マネージ�
 | search-api-lambda-role | `lambda.amazonaws.com` | `es:ESHttp*` (search domain ARN), `kms:Decrypt`, `logs:*` |
 | index-updater-lambda-role | `lambda.amazonaws.com` | `es:ESHttp*` (admin), `s3:GetObject` (source bucket), `kms:Decrypt`, `logs:*` |
 | opensearch-master-user-role | `sts:AssumeRole` を許可 (運用者の IAM Identity Center / search-api-lambda-role / index-updater-lambda-role が `assume` できる Trust ポリシー) | OpenSearch FGAC の master_user として `all_access` ロールに紐付け |
-| ci-cd-deploy-role | `token.actions.githubusercontent.com` (GitHub OIDC + WIF) | `aws_eks_cluster:*`, `lambda:UpdateFunctionCode`, `s3:Put`, 等を絞り込み |
+| ci-cd-deploy-role | `token.actions.githubusercontent.com` (GitHub OIDC) | API Gateway/Lambda/S3 デプロイ用に限定: `lambda:UpdateFunctionCode`, `lambda:UpdateFunctionConfiguration`, `lambda:PublishVersion`, `apigateway:PATCH` / `apigateway:POST` (対象 Stage/Deployment ARN に絞る), `s3:PutObject` / `s3:GetObject` (デプロイ artifact bucket に限定), `iam:PassRole` (Lambda 実行ロールのみ Resource で絞る), `logs:DescribeLogGroups`。**EKS / ECS の権限 (`eks:*`, `ecs:*`) は本案件スコープ外のため付与しない**。 |
 
 > **重要**: `opensearch-master-user-role` の Trust は `es.amazonaws.com` だけにしないこと。それだと運用者・Lambda どちらも `AssumeRole` できず、IAM 認証で OpenSearch を管理できない。`terraform-aws-search/main.tf` の `aws_iam_role.opensearch_master.assume_role_policy` も同方針で構成すること (Trust に運用 SSO ロールおよび Lambda 実行ロールの ARN を `Principal.AWS` で列挙)。
 
@@ -150,11 +152,17 @@ API Gateway / Cognito / CloudFront / KMS / CloudWatch Logs は AWS マネージ�
 
 ### 6.2 CloudWatch Logs
 
-| ログ名 | 保持期間 |
-|--------|---------|
-| /ecs/search-app | 30日 |
-| /aws/lambda/search-api | 30日 |
-| /aws/opensearch/search-prod | 30日 |
+本案件はサーバレス構成（API Gateway + Lambda + OpenSearch）のため、ECS / EKS 由来のロググループは存在しない。
+
+| ログ名 | 保持期間 | 暗号化 (KMS) |
+|--------|---------|--------------|
+| `/aws/lambda/search-api` | 30日 | CMK |
+| `/aws/lambda/index-updater` | 30日 | CMK |
+| `/aws/opensearch/search-prod/index-slow` | 30日 | CMK |
+| `/aws/opensearch/search-prod/search-slow` | 30日 | CMK |
+| `/aws/opensearch/search-prod/audit` | 30日 (＋ `search-prod-audit-logs` バケットへ Firehose で長期保管 / 7年) | CMK |
+| `API-Gateway-Execution-Logs_{rest-api-id}/{stage}` | 30日 | CMK |
+| `aws-waf-logs-search-prod` | 30日 | CMK |
 
 ---
 
