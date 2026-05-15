@@ -33,10 +33,28 @@ spec:
         runAsUser: 1001
         fsGroup: 1001
 
+      # GHCR から private package を pull する場合に必要な docker-registry secret。
+      # 事前に Secret を作っておくこと:
+      #   kubectl create secret docker-registry ghcr-creds \
+      #     --docker-server=ghcr.io \
+      #     --docker-username=<github-username> \
+      #     --docker-password=<github PAT with read:packages> \
+      #     --namespace=<deploy namespace>
+      # GHCR package を public visibility にしてある場合は本ブロックを削除して良い。
+      # GHCR デフォルトは private のため、CI からの publish 直後は必須。
+      imagePullSecrets:
+        - name: ghcr-creds
+
       containers:
       - name: demo-app
+        # 初期値は kustomize/CI 側で `ghcr.io/<owner>/demo-app:<sha>` に bump される。
+        # ローカル Minikube だけで動かす場合は `make local-build` 等で `demo-app:latest` を
+        # クラスタにロードし、本マニフェストの `image:` をその値に書き換えること。
         image: demo-app:latest
-        imagePullPolicy: Never  # Minikubeでローカルイメージを使用
+        # imagePullPolicy:
+        #   - GHCR / ECR / GAR 等のレジストリから取得する CI 経由デプロイ → `IfNotPresent` (本設定)
+        #   - Minikube ローカルビルドだけで動かす場合 → `Never` に書き換える
+        imagePullPolicy: IfNotPresent
 
         # ポート設定
         ports:

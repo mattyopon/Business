@@ -340,12 +340,16 @@ kubectl set env deployment/payment-api -n production EXTERNAL_API_TIMEOUT=5s
 
 ### 4.2 連絡先一覧
 
-| 役割 | 連絡先 | 備考 |
-|------|--------|------|
-| On-call Primary | PagerDuty | 自動通知 |
-| Platform Team | #platform-oncall | Slack |
-| DB Admin | #dba-oncall | Slack |
-| Security | security@example.com | Email + Slack |
+> **本表は雛形** です。`@example.com` 等の placeholder のまま運用すると、Sev1 / Sev2 で実連絡先に届かず一次対応が遅れます。**参画時に実連絡先で必ず上書き**してください。詳細な連絡網は `06_セキュリティガイドライン.md` の「8.3 緊急連絡先」と一致させること。
+
+| 役割 | 連絡先 (参画時に確定) | 連絡手段 | 営業時間外の代替 |
+|------|---------------------|---------|----------------|
+| On-call Primary | PagerDuty スケジュール | 自動通知 → 電話 + Slack DM | 副 On-call |
+| Platform Team | `#platform-oncall` (Slack) | Slack | 副リード |
+| DB Admin | `#dba-oncall` (Slack) | Slack | DBA リード |
+| Security Team | (参画時に設定) | Email + Slack `#security-urgent` | CISO 携帯 |
+| 法務 | (参画時に設定) | Email + 電話 (Sev1/PII 漏えい疑い時) | 顧問弁護士 |
+| AWS Support (Business 以上) | コンソール起票 | Sev1 起票時電話オプション | - |
 
 ---
 
@@ -375,9 +379,9 @@ kubectl set env deployment/payment-api -n production EXTERNAL_API_TIMEOUT=5s
 [根本原因の詳細説明]
 
 ## 影響
-- ユーザー影響: XXX件のリクエストが失敗
-- ビジネス影響: 推定XXX円の損失
-- SLO影響: エラーバジェットXX%消費
+- ユーザー影響: `<実件数>` 件のリクエストが失敗 (CloudWatch / Prometheus から実数を入れる)
+- ビジネス影響: 推定 `<金額>` 円の損失 (取引金額平均 × 失敗件数で算出)
+- SLO 影響: エラーバジェット `<実数値>` % 消費 (`30日内 5xx 比率` を SLO 残量に対して算出)
 
 ## 対応内容
 ### 一時対応
@@ -415,4 +419,5 @@ kubectl set env deployment/payment-api -n production EXTERNAL_API_TIMEOUT=5s
 
 | 日付 | バージョン | 変更内容 | 担当者 |
 |------|-----------|---------|--------|
-| 2026-01-XX | 1.0 | 初版作成 | - |
+| 2026-01-26 | 1.0 | 初版作成 (雛形) | (参画時に確定) |
+| 2026-05-14 | 1.1 | 連絡先 placeholder 運用注意、ユーザー影響欄を実値プレースホルダに変更 | mattyopon |

@@ -76,7 +76,7 @@ rate(app_requests_total{status=~"5.."}[5m]) / rate(app_requests_total[5m])
 
 ### Application Dashboard
 
-1. Open http://localhost:3000 (login: admin/admin)
+1. Open http://localhost:3000 (login: ${GF_SECURITY_ADMIN_USER}/${GF_SECURITY_ADMIN_PASSWORD} (.env で生成))
 2. Navigate to Application Metrics Dashboard
 
 **Talking Points:**

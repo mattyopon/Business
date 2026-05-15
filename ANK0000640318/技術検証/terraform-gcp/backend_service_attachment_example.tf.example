@@ -1,0 +1,43 @@
+# ============================================================================
+# Cloud Armor を実際に効かせるための backend_service attachment 例
+# ============================================================================
+# 本ファイルは `.tf.example` 拡張子なので Terraform は読み込まない。
+# 実環境で Cloud Armor を効かせる時は本ファイルを `.tf` にリネームし、
+# backend / health_check / インスタンスグループ等を自環境の値で書き換える。
+#
+# 関連: main.tf の `google_compute_security_policy.main` (Cloud Armor policy 本体)
+# ============================================================================
+
+# Health check (backend service に必須)
+resource "google_compute_health_check" "payment_api" {
+  name    = "${var.project_name}-payment-api-hc"
+  project = var.project_id
+
+  http_health_check {
+    port         = 8080
+    request_path = "/healthz"
+  }
+}
+
+# Backend service: Cloud Armor policy を紐付ける主体
+resource "google_compute_backend_service" "payment_api" {
+  name                  = "${var.project_name}-payment-api-bs"
+  project               = var.project_id
+  protocol              = "HTTP"
+  port_name             = "http"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  health_checks         = [google_compute_health_check.payment_api.id]
+
+  # ★★★ ここで Cloud Armor policy を attach: これが無いと Cloud Armor は無効 ★★★
+  security_policy = google_compute_security_policy.main.id
+
+  # backend ブロックの中身は実環境の NEG / instance group に合わせて書く
+  # backend {
+  #   group = google_compute_region_network_endpoint_group.payment_api.id
+  # }
+}
+
+# 上記 backend service を front する Global External Application Load Balancer の
+# url_map / target_http_proxy / global_forwarding_rule もこのファイルに追記する想定。
+# Cloud Armor の WAF / Rate Limit / OWASP マネージドルールはこの GLB 配下の
+# トラフィックに対して評価される。

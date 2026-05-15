@@ -1,0 +1,39 @@
+groups:
+  # payment-api 関連アラートは scrape target (./app コンテナ) が雛形未同梱のため、
+  # 同梱されるまでコメントアウトしておく。同梱したら本ブロックと prometheus.yml の
+  # payment-api job を同時に有効化すること (常時 PaymentApiDown が発火するのを防ぐため)。
+  # - name: payment-api-availability
+  #   interval: 30s
+  #   rules:
+  #     - alert: PaymentApiDown
+  #       expr: up{job="payment-api"} == 0
+  #       for: 2m
+  #       labels:
+  #         severity: critical
+  #       annotations:
+  #         summary: "payment-api target down"
+  #         description: "Prometheus has not been able to scrape payment-api for 2m. Check service health and network policy."
+  #
+  #     - alert: PaymentApiHigh5xx
+  #       expr: |
+  #         sum(rate(http_requests_total{job="payment-api",status=~"5.."}[5m]))
+  #           /
+  #         sum(rate(http_requests_total{job="payment-api"}[5m])) > 0.01
+  #       for: 5m
+  #       labels:
+  #         severity: warning
+  #       annotations:
+  #         summary: "payment-api 5xx ratio > 1% (5m)"
+  #         description: "Investigate canary / recent deploy / upstream OpenSearch."
+
+  - name: host-health
+    rules:
+      - alert: NodeFilesystemAlmostFull
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+            / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node filesystem < 10% free"

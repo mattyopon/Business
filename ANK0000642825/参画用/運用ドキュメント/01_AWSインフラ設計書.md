@@ -57,32 +57,40 @@
 
 ---
 
-## 3. コンピューティング設計
+## 3. コンピューティング / 公開エンドポイント設計
 
-### 3.1 ECS Fargate
+本案件のフロントは **API Gateway (REST) + Cognito Authorizer + Lambda (検索 / 投入)** で構成する。商談資料・03_API-Gateway設計書・terraform-aws-search と用語を揃える。
+ECS Fargate / EKS の常駐アプリ層は本案件のスコープ外 (必要が出た段階で別設計書を起票する)。
+
+### 3.1 API Gateway (REST)
 
 | 項目 | 本番環境 | 開発環境 |
 |------|---------|---------|
-| クラスター名 | search-prod-cluster | search-dev-cluster |
-| 起動タイプ | Fargate | Fargate |
-| タスク数 | 3〜10（Auto Scaling） | 1〜2 |
-| CPU | 1024 | 512 |
-| Memory | 2048 | 1024 |
+| API 名 | search-prod-api | search-dev-api |
+| エンドポイントタイプ | REGIONAL (CloudFront / WAF 連携) | REGIONAL |
+| 認可 | Cognito Authorizer (User Pool 連携) | 同上 |
+| スロットリング (アカウント) | 10000 RPS / Burst 5000 | 1000 RPS / Burst 500 |
+| ステージ | `v1` | `v1` |
 
-### 3.2 Auto Scaling
+詳細は `03_API-Gateway設計書.md` を参照。
 
-**スケーリングポリシー**:
-- **スケールアウト**: CPU使用率 > 70% が5分継続
-- **スケールイン**: CPU使用率 < 30% が10分継続
-- **最小タスク数**: 3
-- **最大タスク数**: 10
-
-### 3.3 Lambda
+### 3.2 Lambda
 
 | 関数名 | ランタイム | メモリ | タイムアウト | 用途 |
 |--------|----------|--------|------------|------|
-| search-api | Python 3.11 | 512MB | 30秒 | 検索API |
-| index-updater | Python 3.11 | 1024MB | 300秒 | インデックス更新 |
+| search-api | Python 3.12 | 512MB | 30秒 | `/v1/search` の検索処理 (opensearch-py + AWS4Auth で OpenSearch を叩く) |
+| suggest-api | Python 3.12 | 256MB | 10秒 | `/v1/search/suggest` の補完検索 |
+| index-updater | Python 3.12 | 1024MB | 300秒 | `/v1/indices/*` の投入・削除 (admin scope 必須) |
+
+すべて VPC 内 (Lambda-SG) に配置し、OpenSearch ドメインに接続する。
+
+### 3.3 Auto Scaling (Lambda Provisioned Concurrency)
+
+| 項目 | 設定値 |
+|------|--------|
+| search-api | Provisioned Concurrency 5 (本番) / 0 (dev) |
+| スケーリング指標 | Lambda Concurrent Executions / Duration p95 |
+| 上限 | アカウント上限の 80% で CloudWatch アラート |
 
 ---
 
@@ -90,17 +98,20 @@
 
 ### 4.1 S3バケット
 
-| バケット名 | 用途 | ライフサイクル |
-|-----------|------|--------------|
-| search-prod-logs | アクセスログ | 90日でGlacier |
-| search-prod-backup | バックアップ | 365日で削除 |
-| search-prod-data | 静的データ | なし |
+| バケット名 | 用途 | ライフサイクル | 暗号化 | バージョニング | Object Lock |
+|-----------|------|--------------|--------|--------------|-------------|
+| search-prod-logs | アクセスログ（API Gateway / Lambda / CloudFront 等） | 90日でGlacier | CMK (KMS) | 有効 | なし |
+| search-prod-backup | OpenSearch / Lambda コードのバックアップ | 365日で削除 | CMK (KMS) | 有効 | なし |
+| search-prod-data | 検索データソース（静的データ） | なし | CMK (KMS) | 有効 | なし |
+| **search-prod-audit-logs** | **監査ログ（CloudTrail / Config / OpenSearch 監査ログ / OpenSearch スローログ等）** | **7年保管 (Object Lock Compliance) → 期限満了後削除** | **CMK (KMS)** | **有効** | **Compliance モード / 保持期間 7年** |
+| search-prod-cloudtrail-logs | CloudTrail 専用 (組織トレイル無効案件向け、`search-prod-audit-logs` に集約する場合は本行は省略) | 7年保管 | CMK (KMS) | 有効 | Compliance モード / 7年 |
 
 ### 4.2 S3バケットポリシー
 
-- パブリックアクセス：ブロック
-- 暗号化：SSE-S3
+- パブリックアクセス：すべてのバケットで `BlockPublicAcls` / `IgnorePublicAcls` / `BlockPublicPolicy` / `RestrictPublicBuckets` を有効
+- 暗号化：**カスタマー管理 KMS (CMK)** を必須とする (`05_セキュリティガイドライン.md` 「データ保護」と整合)。`aws/s3` マネージドキー / `SSE-S3` は本案件では採用しない
 - バージョニング：有効
+- Object Lock：監査ログバケット (`search-prod-audit-logs`) で `Compliance` モード、保持期間 7年
 
 ---
 
@@ -108,20 +119,23 @@
 
 ### 5.1 セキュリティグループ
 
+API Gateway / Cognito / CloudFront / KMS / CloudWatch Logs は AWS マネージドサービスで SG を持たない。SG は VPC 内のリソース (Lambda / OpenSearch) のみに付与する。
+
 | SG名 | インバウンド | アウトバウンド |
 |------|------------|--------------|
-| alb-sg | 443 from 0.0.0.0/0 | All |
-| app-sg | 8080 from alb-sg | All |
-| opensearch-sg | 443 from app-sg, lambda-sg | All |
-| lambda-sg | なし | All |
+| lambda-sg | なし (Lambda は受信を持たない) | All (OpenSearch / 外部 API への TLS) |
+| opensearch-sg | 443/tcp from lambda-sg | All |
 
-### 5.2 IAMロール
+### 5.2 IAM ロール
 
-| ロール名 | 用途 | 主なポリシー |
+| ロール名 | Trust | 主なポリシー |
 |---------|------|------------|
-| ecs-task-role | ECSタスク実行 | S3、SecretsManager |
-| ecs-exec-role | ECSタスク定義 | ECR、CloudWatch |
-| lambda-exec-role | Lambda実行 | OpenSearch、S3 |
+| search-api-lambda-role | `lambda.amazonaws.com` | `es:ESHttp*` (search domain ARN), `kms:Decrypt`, `logs:*` |
+| index-updater-lambda-role | `lambda.amazonaws.com` | `es:ESHttp*` (admin), `s3:GetObject` (source bucket), `kms:Decrypt`, `logs:*` |
+| opensearch-master-user-role | `sts:AssumeRole` を許可 (運用者の IAM Identity Center / search-api-lambda-role / index-updater-lambda-role が `assume` できる Trust ポリシー) | OpenSearch FGAC の master_user として `all_access` ロールに紐付け |
+| ci-cd-deploy-role | `token.actions.githubusercontent.com` (GitHub OIDC) | API Gateway/Lambda/S3 デプロイ用に限定: `lambda:UpdateFunctionCode`, `lambda:UpdateFunctionConfiguration`, `lambda:PublishVersion`, `apigateway:PATCH` / `apigateway:POST` (対象 Stage/Deployment ARN に絞る), `s3:PutObject` / `s3:GetObject` (デプロイ artifact bucket に限定), `iam:PassRole` (Lambda 実行ロールのみ Resource で絞る), `logs:DescribeLogGroups`。**EKS / ECS の権限 (`eks:*`, `ecs:*`) は本案件スコープ外のため付与しない**。 |
+
+> **重要**: `opensearch-master-user-role` の Trust は `es.amazonaws.com` だけにしないこと。それだと運用者・Lambda どちらも `AssumeRole` できず、IAM 認証で OpenSearch を管理できない。`terraform-aws-search/main.tf` の `aws_iam_role.opensearch_master.assume_role_policy` も同方針で構成すること (Trust に運用 SSO ロールおよび Lambda 実行ロールの ARN を `Principal.AWS` で列挙)。
 
 ---
 
@@ -138,11 +152,17 @@
 
 ### 6.2 CloudWatch Logs
 
-| ログ名 | 保持期間 |
-|--------|---------|
-| /ecs/search-app | 30日 |
-| /aws/lambda/search-api | 30日 |
-| /aws/opensearch/search-prod | 30日 |
+本案件はサーバレス構成（API Gateway + Lambda + OpenSearch）のため、ECS / EKS 由来のロググループは存在しない。
+
+| ログ名 | 保持期間 | 暗号化 (KMS) |
+|--------|---------|--------------|
+| `/aws/lambda/search-api` | 30日 | CMK |
+| `/aws/lambda/index-updater` | 30日 | CMK |
+| `/aws/opensearch/search-prod/index-slow` | 30日 | CMK |
+| `/aws/opensearch/search-prod/search-slow` | 30日 | CMK |
+| `/aws/opensearch/search-prod/audit` | 30日 (＋ `search-prod-audit-logs` バケットへ Firehose で長期保管 / 7年) | CMK |
+| `API-Gateway-Execution-Logs_{rest-api-id}/{stage}` | 30日 | CMK |
+| `aws-waf-logs-search-prod` | 30日 | CMK |
 
 ---
 

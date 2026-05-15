@@ -1,46 +1,9 @@
-# データ処理パイプライン デモ
+# データ処理パイプライン デモ (構想メモ)
 
-GitHub Actions + Kubernetesを使ったデータ処理パイプラインのデモです。
+> **本ディレクトリは構想メモのみで、コード一式は同梱していません。** 案件に合わせて雛形を流用する際は、本ファイル末尾の「実装する場合のスケルトン」をベースに段階的に整備してください。
+> リポジトリのテンプレートとしては「読み手が即流用できるレベルの最小限の実体」だけを置き、肥大化したREADMEと実体ゼロのギャップは避けるのが本リポの方針です。
 
-## 概要
-
-本デモは、Kubernetesジョブとして実行されるデータ処理パイプラインを構築します。
-
-### 構成
-
-- **GitHub Actions**: パイプラインのトリガー、オーケストレーション
-- **Kubernetes Jobs**: データ処理の実行環境
-- **Argo Workflows**: 複雑なDAGワークフロー（オプション）
-
-## ディレクトリ構成
-
-```
-data-pipeline-demo/
-├── README.md
-├── .github/
-│   └── workflows/
-│       ├── daily-etl.yml        # 日次ETLパイプライン
-│       └── on-demand-process.yml # オンデマンド処理
-├── kubernetes/
-│   ├── namespace.yaml
-│   ├── configmap.yaml
-│   ├── secret.yaml              # テンプレート
-│   └── jobs/
-│       ├── extract-job.yaml
-│       ├── transform-job.yaml
-│       └── load-job.yaml
-├── src/
-│   ├── extract/
-│   │   └── main.py
-│   ├── transform/
-│   │   └── main.py
-│   └── load/
-│       └── main.py
-└── docker/
-    └── Dockerfile
-```
-
-## パイプラインフロー
+## 想定するパイプライン
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -50,105 +13,33 @@ data-pipeline-demo/
       │                   │                   │
       v                   v                   v
   S3/API              Kubernetes          Database
-  Source               Job                 Target
+  Source                Jobs              Target
 ```
 
-## GitHub Actions ワークフロー
+- オーケストレーション: GitHub Actions (cron schedule + workflow_dispatch)
+- 実行基盤: Kubernetes Jobs (Argo Workflows は DAG が複雑になってきた段階で導入検討)
+- シークレット管理: External Secrets Operator → AWS Secrets Manager / GCP Secret Manager
+- 観測性: Job 完了時に Prometheus Pushgateway / Cloud Logging へ結果出力
 
-### 日次ETL（daily-etl.yml）
+## 実装する場合のスケルトン (推奨手順)
 
-```yaml
-name: Daily ETL Pipeline
+1. `app/` または `src/{extract,transform,load}/` にロジック (Python / Go) を実装
+2. `docker/Dockerfile` を作成し、Multi-stage build + distroless でイメージサイズと攻撃面を抑制
+3. `.github/workflows/daily-etl.yml` を作成 (cron schedule + Workload Identity Federation / GitHub OIDC)
+4. `kubernetes/jobs/{extract,transform,load}-job.yaml` を作成。**`ttlSecondsAfterFinished`** と **`backoffLimit`** を必ず設定
+5. `kubernetes/configmap.yaml` / `secret.yaml` (External Secrets 連携) を整備
+6. CI/CD 経由でない再実行を可能にするため、すべてのJobは冪等性 (idempotent) を保つ実装にする
 
-on:
-  schedule:
-    - cron: '0 2 * * *'  # 毎日AM2時（UTC）
-  workflow_dispatch:
+## やってはいけないこと
 
-jobs:
-  etl:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure kubectl
-        uses: azure/k8s-set-context@v3
-        with:
-          kubeconfig: ${{ secrets.KUBECONFIG }}
-
-      - name: Run Extract Job
-        run: kubectl apply -f kubernetes/jobs/extract-job.yaml
-
-      - name: Wait for Extract
-        run: kubectl wait --for=condition=complete job/extract-job --timeout=600s
-
-      - name: Run Transform Job
-        run: kubectl apply -f kubernetes/jobs/transform-job.yaml
-
-      - name: Wait for Transform
-        run: kubectl wait --for=condition=complete job/transform-job --timeout=600s
-
-      - name: Run Load Job
-        run: kubectl apply -f kubernetes/jobs/load-job.yaml
-
-      - name: Wait for Load
-        run: kubectl wait --for=condition=complete job/load-job --timeout=600s
-
-      - name: Cleanup Jobs
-        run: |
-          kubectl delete job extract-job transform-job load-job
-```
-
-## Kubernetes Job 定義例
-
-### Extract Job
-
-```yaml
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: extract-job
-  namespace: data-pipeline
-spec:
-  ttlSecondsAfterFinished: 3600
-  template:
-    spec:
-      containers:
-      - name: extract
-        image: data-pipeline:latest
-        command: ["python", "src/extract/main.py"]
-        env:
-        - name: SOURCE_BUCKET
-          valueFrom:
-            configMapKeyRef:
-              name: pipeline-config
-              key: source_bucket
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: aws-credentials
-              key: access_key_id
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
-            cpu: "500m"
-      restartPolicy: Never
-  backoffLimit: 3
-```
-
-## 学習ポイント
-
-- Kubernetes Jobsによるバッチ処理
-- GitHub ActionsでのCI/CDとワークフロー連携
-- 環境変数とSecretsの管理
-- リソース制限とバックオフ設定
+- 長期 AWS / GCP 鍵を GitHub Secrets に保存して `kubectl apply` する: **OIDC / Workload Identity Federation を使う**
+- `restartPolicy: OnFailure` で無制限リトライ: **`backoffLimit` 必須**
+- Job 完了後の手動削除運用: **`ttlSecondsAfterFinished` で自動削除**
+- 設計時の `placeholder` 値を本番リソースのまま運用: **本リポの参画用ドキュメント (06系) の連絡網雛形ノートと同じ精神で、実値で必ず置き換える**
 
 ## 参考資料
 
 - [Kubernetes Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/)
-- [GitHub Actions](https://docs.github.com/en/actions)
+- [GitHub Actions cron](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule)
 - [Argo Workflows](https://argoproj.github.io/argo-workflows/)
+- [External Secrets Operator](https://external-secrets.io/)

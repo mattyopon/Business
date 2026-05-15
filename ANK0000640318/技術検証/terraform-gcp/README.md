@@ -2,41 +2,38 @@
 
 金融決済プラットフォーム向けGCPインフラのIaCデモです。
 
-## 構成
+## 構成 (本リポ同梱の実体)
 
 ```
 terraform-gcp/
 ├── README.md
-├── main.tf              # メインリソース定義
+├── main.tf              # VPC / GKE Autopilot / Cloud SQL / Memorystore / Cloud Armor / Cloud Spanner
 ├── variables.tf         # 変数定義
-├── outputs.tf          # 出力定義
-├── providers.tf        # プロバイダー設定
-└── modules/
-    ├── gke/            # GKEクラスター
-    ├── cloudsql/       # Cloud SQL
-    └── networking/     # VPCネットワーク
+└── providers.tf         # プロバイダー設定
 ```
 
-## 構築するリソース
+> 本デモは **single-file 構成** で書かれており、`outputs.tf` / `modules/` / `environments/` は同梱していません。新規案件で本テンプレを流用する際に、必要な粒度でモジュール化してください。
+
+## 構築するリソース (`main.tf` で実装済み)
 
 ### ネットワーク
-- VPC
-- サブネット（Public/Private）
-- Cloud NAT
-- Cloud Armor（WAF）
+- VPC (`google_compute_network`)
+- Private サブネット (`google_compute_subnetwork`)
+- Cloud Armor (`google_compute_security_policy`) — XSS / SQLi / Rate-limit ルール
+- (Cloud NAT は本デモには未実装。必要に応じて追加してください)
 
 ### コンピューティング
-- GKEクラスター
-- Node Pool（オートスケーリング）
+- **GKE Autopilot クラスター** (`google_container_cluster` with `enable_autopilot=true`)
+- ノードプールは Autopilot が自動管理 (`google_container_node_pool` リソースは存在しません)
 
-### データベース
-- Cloud SQL（PostgreSQL）
-- Memorystore（Redis）
+### データベース / キャッシュ
+- Cloud SQL (PostgreSQL 15, Regional 構成)
+- Memorystore (Redis 7.0, Standard HA)
+- Cloud Spanner (regional 構成、processing_units=1000、`payment` データベース) — `01_インフラ設計書.md` の Spanner 設計と整合
 
 ### セキュリティ
-- IAM
-- Secret Manager
-- Cloud KMS
+- IAM (本デモには明示的なロール定義なし。Workload Identity Federation 設定は別途整備)
+- (Secret Manager / Cloud KMS は本デモには未実装。本格運用では追加が必須)
 
 ## 使用方法
 

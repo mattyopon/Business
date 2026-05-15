@@ -365,7 +365,7 @@ Output     → Evaluation complete
 ```
 User Action → Open browser: http://localhost:8888
            ↓
-Browser    → Jupyter Lab login (token: mlops-demo)
+Browser    → Jupyter Lab login (token: ${JUPYTER_TOKEN} (.env で設定))
            ↓
 User       → Open notebooks/exploration.ipynb
            ↓

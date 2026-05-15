@@ -3,7 +3,14 @@
 # =============================================================================
 
 terraform {
-  required_version = ">= 1.0"
+  # Terraform 1.9 で input variable validation の condition から
+  # 他の variable / data source / local を参照可能になった (cross-variable
+  # validation)。modules/vpc/variables.tf の `enable_nat_gateway` 周辺で
+  # `var.public_subnets` / `var.single_nat_gateway` を参照するためには
+  # 1.9 以降が必要。1.0-1.8 では `init` / `validate` 段階で
+  # "Invalid reference in variable validation" となり plan 不可。
+  # 参考: https://www.hashicorp.com/blog/terraform-1-9-enhances-input-variable-validations
+  required_version = ">= 1.9"
 
   required_providers {
     aws = {

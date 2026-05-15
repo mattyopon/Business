@@ -22,8 +22,32 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
+# Bootstrap .env (Jupyter token など compose 起動必須変数)
+# docker-compose.yml で ${JUPYTER_TOKEN:?...} を必須化済み。.env が無いと即失敗するため、
+# .env.example をコピーしてランダム token を自動生成する。
+if [ ! -f .env ]; then
+    if [ -f .env.example ]; then
+        echo -e "${BLUE}Bootstrapping .env from .env.example...${NC}"
+        cp .env.example .env
+        if command -v openssl >/dev/null 2>&1; then
+            RAND_TOKEN=$(openssl rand -hex 24)
+            if sed --version >/dev/null 2>&1; then
+                sed -i "s|^JUPYTER_TOKEN=.*|JUPYTER_TOKEN=${RAND_TOKEN}|" .env
+            else
+                sed -i '' "s|^JUPYTER_TOKEN=.*|JUPYTER_TOKEN=${RAND_TOKEN}|" .env
+            fi
+            echo "  → Generated random JUPYTER_TOKEN (48 hex chars) into .env"
+        else
+            echo "  → openssl not found. Edit .env to set a strong JUPYTER_TOKEN before continuing." >&2
+        fi
+    else
+        echo "Error: neither .env nor .env.example found. Cannot continue." >&2
+        exit 1
+    fi
+fi
+
 echo -e "${BLUE}Step 1: Starting services...${NC}"
-docker-compose up -d
+docker-compose --env-file .env up -d
 echo ""
 
 # Wait for MLflow to be ready
@@ -66,7 +90,7 @@ echo "========================================${NC}"
 echo ""
 echo "Next steps:"
 echo "  1. View MLflow UI: http://localhost:5000"
-echo "  2. Open Jupyter Lab: http://localhost:8888 (token: mlops-demo)"
+echo "  2. Open Jupyter Lab: http://localhost:8888 (token: ${JUPYTER_TOKEN} (.env で設定))"
 echo "  3. Check metrics in: ./metrics/"
 echo "  4. Check models in: ./models/"
 echo ""

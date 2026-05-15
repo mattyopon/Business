@@ -42,14 +42,20 @@ services:
     environment:
       - JUPYTER_ENABLE_LAB=yes
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+      # Jupyter Lab 認証は .env 経由で設定。固定 token をリポジトリに残さない (テンプレ流用事故防止)。
+      # 初回利用時は `JUPYTER_TOKEN` と `JUPYTER_PASSWORD_HASH` (argon2 で生成) を .env に設定すること。
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:?set JUPYTER_TOKEN in .env (e.g. openssl rand -hex 24)}
+      - JUPYTER_PASSWORD_HASH=${JUPYTER_PASSWORD_HASH:-}
     command: >
-      jupyter lab
-      --ip=0.0.0.0
-      --port=8888
-      --no-browser
-      --allow-root
-      --NotebookApp.token='mlops-demo'
-      --NotebookApp.password=''
+      sh -c '
+        jupyter lab
+        --ip=0.0.0.0
+        --port=8888
+        --no-browser
+        --allow-root
+        --ServerApp.token="$$JUPYTER_TOKEN"
+        --ServerApp.password="$${JUPYTER_PASSWORD_HASH:-}"
+      '
     networks:
       - mlops-network
     depends_on:

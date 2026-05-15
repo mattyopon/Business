@@ -47,12 +47,19 @@ cd /path/to/mlops-pipeline-demo
 ### 2. Start the Environment
 
 ```bash
-docker-compose up -d
+# 初回は .env を作成 (compose で JUPYTER_TOKEN を必須化しているため必須)
+cp .env.example .env
+# JUPYTER_TOKEN に強い値を設定 (例: openssl rand -hex 24)
+
+# 簡易起動 (.env が無ければ自動生成して起動するラッパー)
+./run-pipeline.sh
+# または手動で:
+#   docker-compose --env-file .env up -d
 ```
 
 This will start:
 - **MLflow Server**: http://localhost:5000 (Experiment tracking UI)
-- **Jupyter Lab**: http://localhost:8888 (Token: `mlops-demo`)
+- **Jupyter Lab**: http://localhost:8888 (Token: `${JUPYTER_TOKEN}` (.env で生成: `openssl rand -hex 24`))
 - **Pipeline Container**: Runs training and evaluation
 
 ### 3. Run the Complete Pipeline
@@ -238,9 +245,9 @@ netstat -ano | findstr :8888
 # Check logs
 docker-compose logs
 
-# Rebuild containers
-docker-compose build --no-cache
-docker-compose up -d
+# Rebuild containers (.env が必要)
+docker-compose --env-file .env build --no-cache
+docker-compose --env-file .env up -d
 ```
 
 ### Out of Memory

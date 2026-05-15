@@ -62,8 +62,17 @@ This project demonstrates a complete monitoring stack using **Prometheus**, **Gr
 # Clone or navigate to the project directory
 cd sre-monitoring-demo
 
-# Start all services
-docker-compose up -d
+# Bootstrap .env (Grafana admin 認証情報など、compose 起動に必須の変数)
+# docker-compose.yml は ${GF_SECURITY_ADMIN_PASSWORD:?...} で必須化済み。
+# 初回は .env.example をコピーし、必ず強いパスワードに置換してから起動する。
+cp .env.example .env
+# .env を編集して GF_SECURITY_ADMIN_PASSWORD を openssl 等で生成した強いパスワードに変更
+# 例: openssl rand -base64 32
+
+# Start all services (start.sh は .env のブートストラップを自動で行う簡易ラッパー)
+./start.sh
+# または手動で:
+#   docker-compose --env-file .env up -d
 
 # Check service status
 docker-compose ps

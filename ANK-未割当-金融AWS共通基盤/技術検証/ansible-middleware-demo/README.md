@@ -34,47 +34,32 @@ Terraform でインフラを構築し、Ansible でミドルウェアを設定�
 
 ---
 
-## ディレクトリ構成
+## ディレクトリ構成 (本リポ同梱の実体)
 
 ```
 ansible-middleware-demo/
 ├── README.md
-├── terraform/                    # インフラ構築
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── environments/
-│       ├── dev.tfvars
-│       └── prod.tfvars
+├── terraform/                    # インフラ構築 (本デモは雛形のため最小限)
+│   └── (案件に応じて main.tf / variables.tf / outputs.tf / environments/ を追加)
 │
 ├── ansible/                      # ミドルウェア設定
 │   ├── ansible.cfg
 │   ├── inventory/
-│   │   ├── hosts.yml             # 静的インベントリ
-│   │   └── aws_ec2.yml           # 動的インベントリ（AWS）
+│   │   └── aws_ec2.yml           # 動的インベントリ (AWS) — 同梱
+│   │   # ※ hosts.yml (静的インベントリ) は同梱しない。必要なら案件側で追加
 │   │
-│   ├── playbooks/
-│   │   ├── site.yml              # メインプレイブック
-│   │   ├── webserver.yml         # Webサーバー設定
-│   │   ├── docker.yml            # Docker設定
-│   │   └── monitoring.yml        # 監視エージェント設定
+│   ├── playbooks/                # site.yml / webserver.yml / docker.yml 等 (案件で必要な分を追加)
 │   │
-│   ├── roles/
-│   │   ├── common/               # 共通設定
-│   │   ├── nginx/                # Nginx設定
-│   │   ├── docker/               # Docker設定
-│   │   ├── node_exporter/        # Prometheus Node Exporter
-│   │   └── fluentd/              # ログ収集
+│   ├── roles/                    # 同梱: common / nginx / docker / node_exporter
+│   │   # ※ fluentd / monitoring 系の role は同梱しない (実プロジェクトで Fluent Bit + DaemonSet 構成を推奨)
 │   │
-│   └── group_vars/
-│       ├── all.yml
-│       ├── webservers.yml
-│       └── appservers.yml
+│   └── group_vars/               # all.yml / webservers.yml / appservers.yml (案件側で値を埋める)
 │
-└── scripts/
-    ├── deploy.sh                 # 統合デプロイスクリプト
-    └── destroy.sh                # クリーンアップ
+└── scripts/                      # deploy.sh / destroy.sh は案件側で必要に応じて作成
 ```
+
+> **本デモのスコープ**: Terraform + Ansible 併用パターンの**構造の参考**として、ansible/inventory + ansible/roles の基本骨格を同梱しています。
+> 完全動作する deploy.sh / Terraform / fluentd role 一式は同梱外で、案件参画時に必要な部分のみ拡張する想定です。
 
 ---
 
@@ -92,6 +77,10 @@ ansible-middleware-demo/
 ```bash
 cd terraform
 
+# tfvars 準備 (環境固有値・実 ARN を含むため、リポジトリには .example のみコミット)
+cp environments/dev.tfvars.example environments/dev.tfvars
+# エディタで environments/dev.tfvars を開き、自環境の値 (key_name, ssh_allowed_cidrs 等) に置換
+
 # 初期化
 terraform init
 
@@ -104,6 +93,8 @@ terraform apply -var-file=environments/dev.tfvars
 # 出力確認（Ansible用のホスト情報）
 terraform output -json > ../ansible/inventory/terraform_outputs.json
 ```
+
+> `environments/<env>.tfvars` はリポジトリの .gitignore 対象 (`*.tfvars` ignore + `*.tfvars.example` 除外)。`.example` 版のみコミットして設定ガイドとして共有する。
 
 ### 2. ミドルウェア設定（Ansible）
 
@@ -178,13 +169,15 @@ output "ansible_inventory" {
 
 ### ロール構成
 
-| ロール | 説明 | 対象 |
-|--------|------|------|
-| `common` | 共通設定（タイムゾーン、パッケージ、ユーザー） | 全サーバー |
-| `nginx` | Nginx インストール・設定 | Web サーバー |
-| `docker` | Docker CE インストール・設定 | App サーバー |
-| `node_exporter` | Prometheus Node Exporter | 全サーバー |
-| `fluentd` | ログ収集エージェント | 全サーバー |
+本デモでは Fluent Bit (DaemonSet 構成) によるログ収集を Kubernetes 案件側で扱う前提とし、**Ansible のロールとしては `fluentd` role を同梱していない**。EC2 系で `fluentd` をホスト側に Ansible で配るユースケースが必要な場合は、別ブランチで `roles/fluentd/` を追加する想定。
+
+| ロール | 説明 | 対象 | 同梱状況 |
+|--------|------|------|----------|
+| `common` | 共通設定（タイムゾーン、パッケージ、ユーザー） | 全サーバー | 同梱 (`ansible/roles/common/`) |
+| `nginx` | Nginx インストール・設定 | Web サーバー | 同梱 (`ansible/roles/nginx/`) |
+| `docker` | Docker CE インストール・設定 | App サーバー | 同梱 (`ansible/roles/docker/`) |
+| `node_exporter` | Prometheus Node Exporter | 全サーバー | 同梱 (`ansible/roles/node_exporter/`) |
+| `fluentd` | ログ収集エージェント (EC2 用) | 全サーバー | **同梱外**。本デモでは Kubernetes クラスタ側で Fluent Bit DaemonSet を採用するため、ホスト側 fluentd は対象外 |
 
 ### プレイブック構成
 
@@ -197,7 +190,7 @@ output "ansible_inventory" {
   roles:
     - common
     - node_exporter
-    - fluentd
+    # fluentd role は本デモ同梱外。Fluent Bit を Kubernetes 側で扱う前提。
 
 - name: Configure web servers
   hosts: webservers
@@ -419,9 +412,9 @@ ssh_allow_password: no
 node_exporter_version: "1.7.0"
 node_exporter_port: 9100
 
-# ログ設定
-fluentd_log_path: /var/log
-fluentd_output_host: "{{ lookup('env', 'FLUENTD_OUTPUT_HOST') | default('localhost') }}"
+# ログ設定 (本デモでは fluentd role 同梱外。下記変数は将来 roles/fluentd/ を追加する場合の参考値)
+# fluentd_log_path: /var/log
+# fluentd_output_host: "{{ lookup('env', 'FLUENTD_OUTPUT_HOST') | default('localhost') }}"
 ```
 
 ### group_vars/webservers.yml

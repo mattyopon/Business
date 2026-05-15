@@ -6,9 +6,9 @@
 
 ### Q1-1: HIPAAコンプライアンスはどのように確保していますか？
 
-**A**: HIPAAコンプライアンスは以下のように確保しています：
+**A**: HIPAA コンプライアンスは以下の方針で**設計時に**満たすことを目指します。HIPAA 適合性は AWS 単独では成立せず、顧客側統制 (運用 / 教育 / 契約 / 物理) を含む共同責任モデルである点を前提に、自社・クライアント双方の役割を明示します。
 
-1. **AWS HIPAA Eligible Services**: HIPAA Eligible Servicesのみを使用し、AWS Business Associate Agreement (BAA) を締結しています。
+1. **AWS HIPAA Eligible Services の限定使用**: PHI を扱う構成では AWS HIPAA Eligible Services リストにあるサービスのみを採用します。**AWS Business Associate Addendum (BAA) は AWS Artifact から承認手続きが必要**で、本案件のクライアント側で BAA 締結状況を確認のうえ、未締結であれば参画初期の課題として優先対応します (`参画用/運用ドキュメント/06_セキュリティガバナンス.md` 「規制対応マップ」で HIPAA を「条件付き」として扱っているのと整合します)。
 
 2. **データ暗号化**: 
    - 転送時: TLS 1.3を使用したHTTPS通信、AWS PrivateLinkによるプライベート接続
@@ -125,9 +125,15 @@
    - 四半期ごとのWell-Architected Review
    - 年次での包括的なセキュリティ監査
 
-4. **監査ログの保持**: 
-   - CloudTrailログは90日間保持（必要に応じてS3にアーカイブ）
-   - データベース監査ログは30日間保持（要件に応じて調整）
+4. **監査ログの保持** (参画用/運用ドキュメント/06_セキュリティガバナンス.md と整合):
+   - **管理操作ログ (CloudTrail)**: S3 アーカイブで **7年保持** (Object Lock + KMS 暗号化)。CloudWatch Logs 側のミラーは取得後 90日でローテーション
+   - **データアクセスログ (Aurora audit / RDS)**: CloudWatch Logs に **1年保持**
+   - **API アクセスログ (CloudFront / ALB / API Gateway)**: S3 アーカイブ **1年保持**
+   - **認証ログ (Cognito)**: CloudWatch Logs **1年保持**
+   - **VPC Flow Logs**: CloudWatch Logs **90日保持** (S3 アーカイブ 1年に延長可)
+   - **アプリケーション一般ログ**: S3 `logs` バケットで **90日保持** (運用ログ用途、監査要件外)
+
+> 医療データ・HIPAA 関連の監査ログは、**業界要件に応じて 6〜10年保管** が一般的 (例: HIPAA は最低 6年)。本テンプレは 7年で揃えており、要件確定時に再調整します。
 
 5. **外部監査**: 
    - 必要に応じて外部セキュリティ監査の実施
@@ -345,9 +351,12 @@ Data Sources → Data Preparation → Feature Engineering → Model Training
    - EBSスナップショットを定期取得（日次または週次）
    - アプリケーション固有のスナップショット戦略
 
-4. **Kubernetesリソース**: 
-   - etcdスナップショットを定期取得
-   - Velero等のバックアップツールを使用
+4. **Kubernetesリソース (EKS マネージド前提)**:
+   - マネージド EKS では etcd は AWS 管理側で運用されており、利用者が etcd snapshot を直接取得する手段はない
+   - 代わりに以下を組み合わせる:
+     - AWS Backup の **EKS cluster state バックアップ** (Backup Plan で対象クラスターを指定)
+     - **Velero** によるネームスペース / PV / マニフェスト単位のバックアップ → S3 バケット (バージョニング + Object Lock)
+     - 永続ボリュームは EBS / EFS のスナップショットを AWS Backup で取得
 
 5. **Terraform状態**: 
    - Terraform状態ファイルはS3に保存し、バージョニングを有効化

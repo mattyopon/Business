@@ -99,7 +99,7 @@ docker-compose run --rm pipeline python pipeline/evaluate.py
 
 # 3. Access services
 # MLflow UI: http://localhost:5000
-# Jupyter Lab: http://localhost:8888 (token: mlops-demo)
+# Jupyter Lab: http://localhost:8888 (token: ${JUPYTER_TOKEN} (.env で設定))
 
 # 4. Stop services
 docker-compose down

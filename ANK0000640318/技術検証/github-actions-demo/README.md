@@ -43,6 +43,12 @@ act push
 
 ## 関連ファイル
 
-- `.github/workflows/ci-cd.yml` - メインワークフロー
-- `Dockerfile` - コンテナイメージ定義（追加予定）
-- `k8s/` - Kubernetesマニフェスト（追加予定）
+- `.github/workflows/ci-cd.yml` - メインワークフロー (lint / test / build / scan / deploy ステージ)
+- `Dockerfile` - コンテナイメージ定義 (multi-stage build + distroless)
+- `../k8s-manifests/` - Kubernetes マニフェスト一式 (Deployment / Service / HPA / ConfigMap / Namespace)
+
+## デモの範囲と限界
+
+- 本デモは **CI/CD 構造の雛形** であり、本案件のクライアント環境固有の値 (WIF Provider, Service Account, manifest repo, ArgoCD endpoint, Prometheus URL) は GitHub Secrets で注入する想定です。
+- `go.mod` / `go.sum` および `cmd/payment-api/` のコードは本デモには含めていません。実際の Go プロジェクトに移植する際に追加してください。
+- 認証は **Workload Identity Federation (OIDC)** 前提で書いており、長期 SA 鍵 (`credentials_json` / `GCP_SA_KEY`) は使用しません。実運用ガイドは `../../参画用/運用ドキュメント/02_CI-CD運用ガイド.md` を参照。

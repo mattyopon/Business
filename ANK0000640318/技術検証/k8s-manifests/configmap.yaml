@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-api-config
+  namespace: payment-platform
+data:
+  # アプリケーション一般設定
+  APP_ENV: "staging"
+  APP_LOG_LEVEL: "info"
+  APP_PORT: "8080"
+  APP_REGION: "asia-northeast1"
+
+  # DB 接続 (パスワード等の機密値は Secret 側 / payment-api-secret を参照)
+  DB_HOST: "payment-db-proxy.svc.cluster.local"
+  DB_PORT: "5432"
+  DB_NAME: "payment"
+  DB_SSL_MODE: "require"
+
+  # Redis / キャッシュ
+  REDIS_HOST: "payment-cache.memorystore.svc.cluster.local"
+  REDIS_PORT: "6379"
+
+  # トレース / モニタリング
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4317"
+  PROMETHEUS_METRICS_PORT: "9090"
+
+  # 外部連携
+  PAYMENT_GATEWAY_BASE_URL: "https://gateway.example.com"
+  PAYMENT_GATEWAY_TIMEOUT_SECONDS: "10"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: payment-api-secret
+  namespace: payment-platform
+type: Opaque
+stringData:
+  # 雛形プレースホルダ。実運用では Secret Manager / External Secrets Operator から注入し、
+  # この Secret マニフェストを Git にコミットしない運用に切り替えること。
+  db-password: "REPLACE_WITH_SECRET_MANAGER_VALUE"
+  payment-gateway-api-key: "REPLACE_WITH_SECRET_MANAGER_VALUE"

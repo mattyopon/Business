@@ -113,7 +113,7 @@
 
 | 項目 | 設定値 |
 |------|--------|
-| Kubernetes Version | 1.28 |
+| Kubernetes Version | 1.33 (2026-05時点 EKS 標準サポート対象。年1-2回のマイナー更新を計画的に追随) |
 | クラスター名 | medical-ai-prod-eks |
 | エンドポイントアクセス | Private + Public |
 | ログタイプ | api, audit, authenticator |
@@ -177,7 +177,8 @@
 |---------|--------|
 | models | 古いバージョンは90日後に削除 |
 | data | 365日後にGlacierへ移行 |
-| logs | 90日後に削除 |
+| logs (アプリケーション一般ログ) | 90日後に削除。本ライフサイクルは**監査ログを含まない** |
+| audit-logs (CloudTrail / Aurora 監査) | 別バケットで **7年保持** (Object Lock 連動)。`logs` バケットとは分離 |
 
 ---
 

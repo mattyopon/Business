@@ -150,21 +150,65 @@ resource "aws_cloudwatch_log_group" "opensearch" {
 # -----------------------------------------------------------------------------
 # IAM Role for OpenSearch Master User
 # -----------------------------------------------------------------------------
+data "aws_caller_identity" "current" {}
+
+# OpenSearch FGAC master_user として使う IAM Role
+#
+# 重要 (privilege escalation 対策):
+#   - 以前は `Principal.AWS = "arn:aws:iam::<account>:root"` で同一アカウント内を広く信頼していたが、
+#     これだと **同一アカウント内で `sts:AssumeRole` 権限を持つ任意のプリンシパル** がこのロールを
+#     AssumeRole して OpenSearch superuser に昇格可能だった。
+#   - 修正後: `var.opensearch_master_trusted_role_arns` で AssumeRole 可能な ARN を **明示列挙** する。
+#     運用ロール (IAM Identity Center 経由の管理者ロール) と、検索 / 投入用 Lambda 実行ロール ARN を
+#     列挙する想定。空 list の場合は本ロールへの AssumeRole 経路を一切作らない (デモ最小構成)。
+#   - 入力 ARN は variables.tf 側の validation で `root` 不可・`arn:aws:iam::<account>:(role|user)/` 形式に限定。
+#
+# 注意: Trust に `es.amazonaws.com` を書く必要はない (これは domain access policy 側の話)。
 resource "aws_iam_role" "opensearch_master" {
   name = "${var.project_name}-opensearch-master"
 
+  # `var.opensearch_master_trusted_role_arns` は variables.tf 側で
+  # `length(...) > 0` の validation を強制しているため、ここに到達する時点で必ず非空。
+  # 非存在 ARN を Principal に書くと IAM が apply 時に "Invalid principal in policy" で
+  # 弾くため、placeholder ARN を使うアプローチは取れない (Codex 10th review 指摘)。
+  # よってデフォルト値を持たせず「明示的な信頼 ARN の列挙」を強制する設計に揃えている。
+  #
+  # `aws:PrincipalAccount` Condition は `var.expected_account_id` を参照する。
+  # 以前は `data.aws_caller_identity.current.account_id` を直接使っていたが、
+  # `opensearch_master_trusted_role_arns` 側の variable validation との整合 (各 ARN の
+  # account == Condition の account) を変数段階で保証できないため、Codex 22nd loop で
+  # cross-account ARN が validation を素通りして runtime AssumeRole deny される silent
+  # failure が指摘された。`expected_account_id` を中心に据えることで variable validation
+  # から trust policy までを 1 か所で揃える。実 caller との整合は下記 precondition で担保。
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Action = "sts:AssumeRole"
+        Sid    = "AllowExplicitlyEnumeratedPrincipalsToAssume"
         Effect = "Allow"
+        Action = "sts:AssumeRole"
         Principal = {
-          Service = "es.amazonaws.com"
+          AWS = var.opensearch_master_trusted_role_arns
+        }
+        Condition = {
+          StringEquals = {
+            "aws:PrincipalAccount" = var.expected_account_id
+          }
         }
       }
     ]
   })
+
+  # Variable 値だけでは「Terraform が今ログインしている AWS アカウント」と
+  # `expected_account_id` の一致は保証できない。両者がずれた状態で apply すると、
+  # 別アカウント宛の IAM ロールを誤って作る or trust policy が無意味な値を持つ事故になる。
+  # `lifecycle.precondition` (Terraform 1.2+) で plan/apply 時にこの不整合を検出して停止する。
+  lifecycle {
+    precondition {
+      condition     = var.expected_account_id == data.aws_caller_identity.current.account_id
+      error_message = "expected_account_id (${var.expected_account_id}) must match the AWS account in which Terraform is currently authenticated (${data.aws_caller_identity.current.account_id}). Either fix expected_account_id in tfvars or switch your AWS credentials."
+    }
+  }
 
   tags = local.common_tags
 }

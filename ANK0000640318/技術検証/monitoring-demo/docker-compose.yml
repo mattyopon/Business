@@ -24,8 +24,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:?set GF_SECURITY_ADMIN_USER in .env}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD in .env}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -53,12 +53,15 @@ services:
     restart: unless-stopped
 
   # Sample App - デモアプリケーション
-  sample-app:
-    build: ./app
-    container_name: sample-app
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
+  # NOTE: 本デモは Prometheus / Grafana / Alertmanager / Node Exporter の構成検証が主目的。
+  # `./app` は雛形のため未同梱。実プロジェクトの payment-api を計装するときに `./app/Dockerfile` を追加し、
+  # `/metrics` エンドポイントを expose してから本サービスを有効化すること。
+  # sample-app:
+  #   build: ./app
+  #   container_name: sample-app
+  #   ports:
+  #     - "8000:8000"
+  #   restart: unless-stopped
 
 volumes:
   prometheus_data:

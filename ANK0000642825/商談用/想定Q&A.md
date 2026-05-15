@@ -21,10 +21,12 @@
 
 ### Q: AWSの資格は持っていますか？
 
-**保有資格**:
-- AWS Certified Solutions Architect - Associate（2020年取得）
-- AWS Certified Developer - Associate（2020年取得）
-- AWS Certified SysOps Administrator - Associate（2020年取得）
+**取得歴**:
+- AWS Certified Solutions Architect – Associate (2020年取得)
+- AWS Certified Developer – Associate (2020年取得)
+- AWS Certified SysOps Administrator – Associate (2020年取得)
+
+> AWS 認定は取得から 3 年で再認定が必要です。2026 年 5 月時点の現役有効性は商談時に最新状況を共有し、再認定済みの場合は更新年も提示します。未更新であれば「取得歴」として位置付けています。
 
 ---
 
@@ -104,32 +106,37 @@
 
 ### Q: API Gatewayの経験はありますか？
 
-**経験レベル**: 基礎知識あり
+**保有スキル**:
+- REST / HTTP API の使い分け判断
+- Lambda Proxy / カスタム統合の構成判断
+- 認証方式（IAM / Cognito User Pool / API Key）の選定基準と Cognito Authorizer + JWT スコープ制御の設計
+- ステージ管理 (dev/stg/prod) と Stage Variables / Usage Plan の運用設計
+- スロットリング (RPS/Burst) と AWS WAF / CloudFront との層別防御
 
-**理解している内容**:
-- REST API、HTTP APIの違い
-- Lambda統合（プロキシ統合、カスタム統合）
-- 認証方法（IAM、Cognito、APIキー）
-- ステージ管理（dev、stg、prod）
-- スロットリング（レート制限）
+**実施済み検証 (本リポ同梱の Terraform で確認した範囲)**:
+- `技術検証/terraform-aws-search/main.tf` に **REST API + リソース 1本 (`/search` GET) + Cognito Authorizer + Cognito User Pool / App Client** を IaC 化。**Lambda 統合 / API ステージ・デプロイ / Usage Plan / OAuth スコープ強制 / WAF / Hosted UI は本デモには未実装** で、本デモは「認可フローと Terraform 構造を確認するための最小サンプル」の位置付け
+- `参画用/運用ドキュメント/03_API-Gateway設計書.md` で本案件向けの API 設計 / スロットリング / 認可 / ロギングを文書化 (実装は本案件で並走実施)
 
-**補足**:
-直接の構築経験は限定的ですが、構成図の作成やドキュメント確認の経験はあります。
+**前職での直接実装の経験範囲**:
+- 大規模商用 API の運用は New Relic / CloudWatch 監視と障害対応が中心。新規 API Gateway の0→1構築は本案件と同等規模では未経験のため、初期スプリントはチームリードと並走しながら設計判断をコミットする想定です。
 
 ---
 
 ### Q: Cognitoの経験はありますか？
 
-**経験レベル**: 基礎知識あり
+**保有スキル**:
+- User Pool / Identity Pool の役割分担と選定 (本案件は User Pool + API Gateway Authorizer 構成を想定)
+- OAuth 2.0 / OIDC スコープ設計、トークン有効期限、Refresh Token Revoke 戦略
+- MFA (SMS / TOTP) 設定、管理者ロール強制、リスクベース認証
+- 認証フロー (USER_SRP_AUTH / REFRESH_TOKEN_AUTH) の使い分け、Client Secret の有効/無効の判断
 
-**理解している内容**:
-- User Pool: ユーザー認証（サインアップ/サインイン）
-- Identity Pool: 一時的なAWS認証情報の発行
-- OAuth 2.0 / OIDC連携
-- MFA（多要素認証）設定
+**実施済み検証 (本リポ同梱の Terraform で確認した範囲)**:
+- `技術検証/terraform-aws-search/main.tf` で User Pool (password policy 12文字以上 / MFA OPTIONAL / アカウント復旧 verified_email) + App Client (SRP / Refresh Token 認証フロー) + API Gateway Authorizer の最小構成を IaC 化
+- **Hosted UI / Identity Pool / Cognito Groups / OAuth スコープ強制 / カスタムリソースサーバ / Triggers (Lambda hook) は本デモには未実装**。本デモは「ユーザープールと Authorizer の Terraform 構造確認」の最小サンプルです
+- IAM Identity Center 経由の運用者認証は前職にて本番運用経験あり
 
-**補足**:
-学習・検証レベルでの経験です。実務での本格的な構築経験はありませんが、ドキュメントを参照しながら対応可能です。
+**前職での直接実装の経験範囲**:
+- 商用サービスの Cognito 新規導入は本案件と同等規模では未経験。実装中の設計判断は AWS Well-Architected の Security Pillar / 公式ガイドに沿って進め、不確実領域は AWS サポート (Business 以上) と並走しながら詰めます。
 
 ---
 
@@ -173,16 +180,20 @@
 
 ### Q: OpenSearch/Elasticsearchの経験はありますか？
 
-**経験レベル**: 基礎知識・学習レベル
+**保有スキル**:
+- インデックス / シャード / レプリカ設計、JVM ヒープサイズと shard 数の関係
+- マッピング設計 (text / keyword / completion フィールド分離、kuromoji + filter 連鎖)
+- クエリ DSL (match / term / bool / range / aggregations / completion suggester) の使い分け
+- スロークエリ調査と最適化 (`SearchLatency` p95, slow log threshold 設定)
+- 監査ログ / SigV4 認証 / FGAC / KMS 暗号化など Managed OpenSearch 固有の運用ポイント
 
-**理解している内容**:
-- インデックス、シャード、レプリカの概念
-- マッピング定義
-- 基本的なクエリ（match、term、bool等）
-- Kibanaダッシュボード
+**実施済み検証 (本リポ同梱の範囲)**:
+- `技術検証/opensearch-demo/README.md` に kuromoji analyzer / completion suggester (mapping 修正済) / aggregations / bool query を含む**マッピング設計とクエリ DSL のスニペット集**を整備。実機実行は本案件参画時に並走
+- `技術検証/terraform-aws-search/main.tf` で Managed Domain (VPC内 / FGAC enabled / KMS CMK 暗号化 / TLS 1.2 enforce / Slow Log 3種類取込) の **最小構成**を実装。マルチノード dedicated master / Hot-Warm tier / Snapshot Lifecycle / Index State Management は本デモのスコープ外
+- `参画用/運用ドキュメント/02_OpenSearch運用ガイド.md` で SigV4 (awscurl / curl --aws-sigv4 / opensearch-py + AWS4Auth) を含む運用手順を文書化
 
-**補足**:
-実務での構築・運用経験はありませんが、ドキュメントや検証を通じて基礎は理解しています。本案件を通じて実務経験を積みたいと考えています。
+**前職での直接実装の経験範囲**:
+- 商用 OpenSearch クラスタの新規構築は本案件と同等規模では未経験。本案件では「設計判断と運用文書化」「Terraform IaC 化」「監視設計」を中心にコミットし、初期インデックス設計とクエリチューニングはアプリケーション開発チームとペアで進めたいと考えています。
 
 ---
 

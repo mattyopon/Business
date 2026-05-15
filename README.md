@@ -29,8 +29,10 @@ Business/
 │   ├── 参画用/              # 参画後の設計・運用ドキュメント
 │   └── 技術検証/            # 技術デモプロジェクト
 │
-└── ANK-未割当/              # 未割当案件用テンプレート
-    └── 技術検証/            # 汎用技術デモ
+└── ANK-未割当/              # 未割当案件用テンプレート (新規案件雛形)
+    ├── 商談用/              # ヒアリングシート / 想定 Q&A 等の雛形
+    ├── 参画用/              # 設計書 / インフラ構成図 / ADR / 技術選定理由書 の雛形
+    └── 技術検証/            # 汎用技術デモ (k8s-github-actions-demo / data-pipeline-demo)
 ```
 
 ---
@@ -114,9 +116,11 @@ docker-compose up -d
 # SRE監視デモ起動
 cd ANK0000639199/技術検証/sre-monitoring-demo
 docker-compose up -d
-# Grafana: http://localhost:3000 (admin/admin)
+# Grafana: http://localhost:3000
 # Prometheus: http://localhost:9090
 ```
+
+> **⚠ ローカル検証の初期資格情報について**: 各デモの `docker-compose.yml` は雛形のため、Grafana 初期管理者 (`admin/admin`) や Jupyter 初期トークン (例: `mlops-demo`) を弱い既定値で持っている場合があります。**実プロジェクトに流用する前に必ず `.env` 経由で個別設定し、初期既定値で起動した状態を残さないでください**。
 
 ---
 

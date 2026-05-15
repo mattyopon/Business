@@ -20,3 +20,44 @@ variable "environment" {
   type        = string
   default     = "production"
 }
+
+# GKE Master Authorized Networks 用の踏み台ホスト CIDR
+# 設計書 01_インフラ設計書.md 「3.x 踏み台・IAP 経由アクセス」と整合させ、
+# 広域 CIDR は許可しない。validation は「プレフィックス長」で機械的に強制する
+# (denylist 方式は 10.1.0.0/16 や 10.0.0.0/9 などが素通りするため不採用)。
+variable "bastion_cidr" {
+  description = "Bastion host subnet CIDR for GKE master authorized networks. Must have prefix /24 or longer (i.e., a small subnet). Wide ranges are rejected to prevent reopening master endpoint."
+  type        = string
+  default     = "10.0.16.0/28"
+
+  validation {
+    # 1) CIDR セマンティクスの正当性チェック (regex でなく cidrhost で検証)
+    #    regex だと 999.999.999.999/24 のような不正オクテットや 10.0.0.1/24
+    #    (ホスト bit がついた CIDR ではない) が素通りするため、Terraform 組み込みの
+    #    cidrhost() で実際に解析が成立するかを確認する。
+    condition     = can(cidrhost(var.bastion_cidr, 0)) && can(cidrnetmask(var.bastion_cidr))
+    error_message = "bastion_cidr must be a valid IPv4 CIDR (e.g., 10.0.16.0/28). Invalid octets or malformed CIDR are rejected."
+  }
+
+  validation {
+    # 2) プレフィックス長チェック: /24 以上の narrow な範囲に限定
+    #    /24 (256 IP) は踏み台サブネットとして実用上の上限。/25, /26, /27, /28 が一般的な踏み台サイズ。
+    #    /23 以下のサイズ (/8, /16 等) は禁止。これにより 10.0.0.0/8 / 10.1.0.0/16 / 10.0.0.0/9 等を全てブロック。
+    #
+    # 注: Terraform の variable validation は各 validation ブロックが独立評価される。
+    #      たとえ前の validation で形式不正 (foo / 10.0.0.0/x) を弾いていても、
+    #      この条件式が直接 var.bastion_cidr を split/tonumber するとそこで先に panic する
+    #      ("Invalid index" 等の生エラーが出てしまう)。
+    #      try() で全体を包み、評価が失敗した場合は false を返してこの validation も失敗扱いに
+    #      する。形式不正自体の正しいエラーメッセージは validation 1) (cidrhost ベース) が出す。
+    condition     = try(tonumber(split("/", var.bastion_cidr)[1]) >= 24, false)
+    error_message = "bastion_cidr must have prefix length /24 or longer (smaller subnet). Wide ranges such as /8, /9, /16, /20, /23 reopen the GKE master endpoint and are forbidden."
+  }
+
+  validation {
+    # 3) 明示的なブロックリスト (RFC1918 全域 / 0.0.0.0/0) — 上記 2) で既に弾かれるが、
+    #    エラーメッセージ上で「これらは禁止」と明示するための補助チェック。
+    condition     = !contains(["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "0.0.0.0/0"], var.bastion_cidr)
+    error_message = "bastion_cidr cannot be a full RFC1918 range or 0.0.0.0/0."
+  }
+}

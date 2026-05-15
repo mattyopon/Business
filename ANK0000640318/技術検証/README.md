@@ -25,7 +25,7 @@ SRE、CI/CD、コンテナ技術、監視の実践的なスキルを示します
 ```bash
 cd monitoring-demo
 docker-compose up -d
-# Grafana: http://localhost:3000 (admin/admin)
+# Grafana: http://localhost:3000 (.env で設定した GF_SECURITY_ADMIN_USER / GF_SECURITY_ADMIN_PASSWORD でログイン)
 # Prometheus: http://localhost:9090
 ```
 

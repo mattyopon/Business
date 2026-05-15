@@ -53,6 +53,27 @@ yarn-error.log
 *.bak
 *.cache
 
+# Terraform working state
+# 注:
+#  - .terraform.lock.hcl は **コミットする** (HashiCorp 公式推奨)。プロバイダーバージョンを
+#    固定し、別マシン/CI 上の `terraform init` で provider が silent に drift するのを防ぐ。
+#  - terraform.tfvars (実 ARN / 環境固有値を含む) は **コミットしない**。
+#    terraform.tfvars.example のみコミットして設定ガイドとして共有する。
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+# 全 .tfvars ファイルを ignore (terraform.tfvars / dev.tfvars / environments/prod.tfvars 等)。
+# サンプル/テンプレートは *.tfvars.example として明示的に許可。
+*.tfvars
+*.auto.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
 # 内部作業用プロンプト（gitに含めない）
 ANK0000639199/商談用/GenSpark構成図プロンプト.md
 ANK0000640318/商談用/資料/GenSpark_プロンプト.md
