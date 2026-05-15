@@ -53,6 +53,18 @@ yarn-error.log
 *.bak
 *.cache
 
+# Terraform working state
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
 # 内部作業用プロンプト（gitに含めない）
 ANK0000639199/商談用/GenSpark構成図プロンプト.md
 ANK0000640318/商談用/資料/GenSpark_プロンプト.md
