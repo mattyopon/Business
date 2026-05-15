@@ -92,7 +92,7 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
 
-      - run: gcloud auth configure-docker ${REGISTRY}
+      - run: gcloud auth configure-docker ${REGISTRY} --quiet
 
       - id: meta
         uses: docker/metadata-action@v5
@@ -134,7 +134,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
-      - run: gcloud auth configure-docker ${REGISTRY}
+      - run: gcloud auth configure-docker ${REGISTRY} --quiet
 
       # Action は再現性確保のためタグ pin する (master 参照は禁止)。
       - uses: aquasecurity/trivy-action@0.24.0

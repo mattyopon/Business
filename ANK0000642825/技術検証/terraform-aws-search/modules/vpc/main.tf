@@ -56,26 +56,27 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# 多 NAT モード: 1 private subnet ごとに 1 つの route table を作る (private subnet 数を起点)。
-# 旧実装は count を public_subnets 数で計算しており、private subnets > public subnets の構成
-# (例: 2 public + 3 private) で association が index 不一致で失敗していた。
-# NAT 自体は public subnet (= public AZ) ごとにしか置けないので、private subnet[i] の egress は
-# NAT[i % length(public_subnets)] に向ける (round-robin で AZ-locality を維持)。
+# 多 NAT モード: 1 private subnet ごとに 1 つの route table を作る (AZ-local routing)。
+#   private_subnets[i] → public_subnets[i] にある NAT[i] (同じ AZ)
+# variables.tf 側 validation で multi-NAT (single_nat_gateway=false) 時は
+# length(private_subnets) == length(public_subnets) を強制しているため、
+# i は両 list で有効な index となり cross-AZ 経路は発生しない。
+# single_nat_gateway=true (コスト最適化モード) では 1 つの route table を全 private subnet で共有。
 #
-# 防御: enable_nat_gateway=true + public_subnets=[] の組み合わせは variables.tf 側の validation で
-# reject される。ただし validation を回避された場合に div-by-zero しないよう、modulo 部分を
-# `max(1, ...)` でも保護する (NAT 不在時は route block 自体が生成されないので実際には到達しない)。
+# 防御: enable_nat_gateway=true + public_subnets=[] / 数不一致は variables.tf 側で reject される。
+# 万が一 validation を回避されても max(1, ...) で modulo の div-by-zero を防ぐ (route block 自体は不生成)。
 resource "aws_route_table" "private" {
   count  = var.enable_nat_gateway ? (var.single_nat_gateway ? 1 : length(var.private_subnets)) : 1
   vpc_id = aws_vpc.this.id
 
   dynamic "route" {
-    # NAT が 0 個 (public_subnets=[]) なら route block を生成しない (default route 無し)。
-    # 通常運用では variables.tf 側 validation で先に止まる。
+    # NAT が 0 個なら route block を生成しない (validation で本来到達しない経路)。
     for_each = var.enable_nat_gateway && length(aws_nat_gateway.this) > 0 ? [1] : []
     content {
-      cidr_block     = "0.0.0.0/0"
-      nat_gateway_id = aws_nat_gateway.this[count.index % max(1, length(aws_nat_gateway.this))].id
+      cidr_block = "0.0.0.0/0"
+      # multi-NAT モード: AZ-local (i ↔ i) なので modulo は冗長だが defense-in-depth で残す。
+      # single-NAT モード: 全 private subnet が aws_nat_gateway.this[0] を共有 (this resource は count=1)。
+      nat_gateway_id = aws_nat_gateway.this[var.single_nat_gateway ? 0 : count.index % max(1, length(aws_nat_gateway.this))].id
     }
   }
 
