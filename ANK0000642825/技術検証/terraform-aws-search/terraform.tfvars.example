@@ -48,8 +48,17 @@ log_retention_days = 30
 # 禁止:
 #   - arn:aws:iam::<account>:root (validation で reject)
 #   - 非 IAM ARN (validation で reject)
+#   - expected_account_id 以外の account に属する ARN (cross-variable validation で reject)
 #
 # 下記は **サンプル値**。実際の ARN に書き換えること。
+# expected_account_id と全 ARN の account ID を一致させること (mismatch は plan で fail)。
+
+# Terraform を実行する AWS アカウントの 12 桁 ID。
+# 全 opensearch_master_trusted_role_arns の account ID と一致させること
+# (variables.tf の cross-variable validation で照合)。実際の Terraform 認証先
+# (data.aws_caller_identity) との整合は main.tf の
+# aws_iam_role.opensearch_master.lifecycle.precondition で apply 時に検証される。
+expected_account_id = "123456789012"
 
 opensearch_master_trusted_role_arns = [
   # IAM Identity Center 管理者ロール (例)
