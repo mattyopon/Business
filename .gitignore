@@ -54,13 +54,17 @@ yarn-error.log
 *.cache
 
 # Terraform working state
-# 注: .terraform.lock.hcl は **コミットする** (HashiCorp 公式推奨)。
-#     プロバイダーバージョンを固定し、別マシン/CI 上の `terraform init` で
-#     プロバイダーが silent に drift するのを防ぐ。よって gitignore には載せない。
+# 注:
+#  - .terraform.lock.hcl は **コミットする** (HashiCorp 公式推奨)。プロバイダーバージョンを
+#    固定し、別マシン/CI 上の `terraform init` で provider が silent に drift するのを防ぐ。
+#  - terraform.tfvars (実 ARN / 環境固有値を含む) は **コミットしない**。
+#    terraform.tfvars.example のみコミットして設定ガイドとして共有する。
 .terraform/
 *.tfstate
 *.tfstate.backup
 *.tfplan
+*.auto.tfvars
+terraform.tfvars
 crash.log
 override.tf
 override.tf.json

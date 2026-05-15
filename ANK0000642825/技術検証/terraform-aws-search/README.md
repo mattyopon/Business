@@ -53,21 +53,64 @@ terraform-aws-search/
 - Terraform >= 1.0
 - AWS CLI設定済み
 - 適切なIAM権限
+- **OpenSearch master role の信頼 ARN リスト** (`opensearch_master_trusted_role_arns`): セキュリティ上の理由でデフォルト値なし。明示的に列挙すること (詳細は下記)
 
 ## 使用方法
+
+### 1. tfvars ファイル準備 (必須)
+
+`terraform.tfvars.example` をコピーし、自環境の値で書き換える:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+# エディタで terraform.tfvars を開いて以下を埋める:
+#   - opensearch_master_trusted_role_arns: 運用ロール + Lambda 実行ロールの ARN を列挙
+#   - environment / project_name / aws_region など必要に応じて
+```
+
+> `terraform.tfvars` は `.gitignore` 対象想定 (環境固有値・ARN を含むため)。
+> リポジトリにコミットするのは `terraform.tfvars.example` のみ。
+
+### 2. plan / apply 実行
 
 ```bash
 # 初期化
 terraform init
 
-# プラン確認 (dev環境)
-terraform plan -var="environment=dev"
+# プラン確認 (dev環境、tfvars 経由)
+terraform plan -var-file=terraform.tfvars -var="environment=dev"
 
 # 適用
-terraform apply -var="environment=dev"
+terraform apply -var-file=terraform.tfvars -var="environment=dev"
 ```
 
+または `-var="opensearch_master_trusted_role_arns=[...]"` を直接渡しても良い。CI から渡す場合は CI Secret + `-var-file=<(echo "opensearch_master_trusted_role_arns=...")` 等を推奨。
+
 `environment` を `stg` / `prod` に切り替えると、OpenSearchの zone_awareness や dedicated master 等が変化します (詳細は `main.tf` 内の dynamic block 参照)。
+
+### 3. 必須変数: `opensearch_master_trusted_role_arns`
+
+OpenSearch FGAC の master_user として AssumeRole 可能な IAM ロール / ユーザー ARN を **明示列挙** する。デフォルト値なし (Codex 9th-11th review で privilege escalation リスクおよび invalid principal リスクが指摘され、required 変数化した経緯)。
+
+- 必ず指定するもの:
+  - 運用者ロール: IAM Identity Center の管理者ロール ARN (例: `arn:aws:iam::123456789012:role/AWSReservedSSO_AdminAccess_xxxxxxxx`)
+  - 検索 Lambda 実行ロール: 検索 API Lambda の execution role ARN
+  - インデックス更新 Lambda 実行ロール: index-updater Lambda の execution role ARN
+- 禁止:
+  - `arn:aws:iam::<account>:root` (validation で reject される)
+  - 非 IAM ARN (validation で reject される)
+
+検証:
+
+```bash
+# 空 list を渡すと validation エラー
+terraform plan -var='opensearch_master_trusted_role_arns=[]'
+# → Error: opensearch_master_trusted_role_arns must contain at least one entry...
+
+# root を渡すと validation エラー
+terraform plan -var='opensearch_master_trusted_role_arns=["arn:aws:iam::123456789012:root"]'
+# → Error: Account-root principals ... are not allowed
+```
 
 ## 主要リソース
 

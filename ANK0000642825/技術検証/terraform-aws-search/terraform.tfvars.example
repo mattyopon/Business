@@ -1,0 +1,63 @@
+# ============================================================================
+# terraform-aws-search サンプル tfvars
+# ============================================================================
+# 使い方:
+#   cp terraform.tfvars.example terraform.tfvars
+#   <terraform.tfvars をエディタで開き、自環境の値で書き換える>
+#   terraform plan -var-file=terraform.tfvars -var="environment=dev"
+#
+# 注意:
+#   - terraform.tfvars 本体は実 ARN や環境固有値を含むためリポジトリにはコミットしない (.gitignore 対象想定)
+#   - 本ファイル (terraform.tfvars.example) はコミットして、設定ガイドとして共有する
+# ============================================================================
+
+# --- 基本設定 -----------------------------------------------------------------
+
+project_name = "search-platform"
+environment  = "dev" # dev / stg / prod
+aws_region   = "ap-northeast-1"
+
+# --- VPC / Subnet ------------------------------------------------------------
+
+vpc_cidr             = "10.50.0.0/16"
+availability_zones   = ["ap-northeast-1a", "ap-northeast-1c"]
+public_subnet_cidrs  = ["10.50.0.0/24", "10.50.1.0/24"]
+private_subnet_cidrs = ["10.50.10.0/24", "10.50.11.0/24"]
+
+# --- OpenSearch --------------------------------------------------------------
+
+opensearch_instance_type  = "t3.small.search" # dev 想定。本番は m6g.large.search 以上を推奨
+opensearch_instance_count = 2
+opensearch_volume_size    = 100
+
+# --- Logging -----------------------------------------------------------------
+
+log_retention_days = 30
+
+# --- OpenSearch master role trust (必須) -------------------------------------
+#
+# OpenSearch FGAC の master_user として AssumeRole 可能な IAM ロール / ユーザー ARN を
+# 明示列挙する。Codex review (9th-11th loop) で privilege escalation リスクが指摘されたため、
+# デフォルト値なし (required 変数化)。
+#
+# 必ず指定するもの:
+#   - 運用者ロール (例: IAM Identity Center の管理者ロール)
+#   - 検索 API Lambda の execution role
+#   - インデックス更新 Lambda の execution role
+#
+# 禁止:
+#   - arn:aws:iam::<account>:root (validation で reject)
+#   - 非 IAM ARN (validation で reject)
+#
+# 下記は **サンプル値**。実際の ARN に書き換えること。
+
+opensearch_master_trusted_role_arns = [
+  # IAM Identity Center 管理者ロール (例)
+  "arn:aws:iam::123456789012:role/AWSReservedSSO_AdminAccess_REPLACE_ME",
+
+  # 検索 API Lambda の execution role
+  "arn:aws:iam::123456789012:role/search-platform-search-api-lambda-role",
+
+  # インデックス更新 Lambda の execution role
+  "arn:aws:iam::123456789012:role/search-platform-index-updater-lambda-role",
+]
