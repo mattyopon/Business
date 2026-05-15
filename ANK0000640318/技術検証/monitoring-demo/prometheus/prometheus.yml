@@ -27,7 +27,12 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
-  - job_name: payment-api
-    metrics_path: /metrics
-    static_configs:
-      - targets: ['payment-api:8080']
+  # payment-api scrape: ./app と payment-api コンテナは雛形未同梱 (docker-compose.yml で
+  # 該当サービスはコメントアウト)。スクレイプ先が存在しないため、本ターゲットも合わせて
+  # コメントアウトする。実プロジェクトで payment-api 計装が完了した時点で
+  # docker-compose の sample-app/payment-api と一緒にこのブロックを有効化すること。
+  # alerts.yml の `PaymentApiDown` / 5xx ratio / latency ルールも同時に有効化する。
+  # - job_name: payment-api
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ['payment-api:8080']

@@ -11,10 +11,14 @@ resource "google_compute_network" "main" {
   project                 = var.project_id
 }
 
-# Public Subnet
+# Public Subnet (外部 LB / Cloud NAT 用)
+# 重要: gke-subnet (10.0.0.0/20 = 10.0.0.0-10.0.15.255) と CIDR が重ならない範囲を選ぶ。
+#       db-subnet (10.0.16.0/24) / proxy-subnet (10.0.17.0/24) も避ける必要がある。
+#       本書では 10.0.32.0/24 (10.0.32.0-10.0.32.255) を採用。設計書 01_インフラ設計書.md の
+#       「2.2 サブネット設計」もこの値で整合させること。
 resource "google_compute_subnetwork" "public" {
   name          = "${var.project_name}-public-subnet"
-  ip_cidr_range = "10.0.1.0/24"
+  ip_cidr_range = "10.0.32.0/24"
   region        = var.region
   network       = google_compute_network.main.id
   project       = var.project_id
@@ -202,11 +206,29 @@ resource "google_redis_instance" "main" {
 
 # ----------------------------------------------
 # Cloud Armor (WAF / DDoS) - 設計書 01_インフラ設計書.md "6.1 Cloud Armor" と整合
+#
+# 重要: Cloud Armor の security_policy は **単独では何も保護しない**。
+#       backend_service / backend_bucket / global external Application Load Balancer の
+#       backend に `security_policy = google_compute_security_policy.main.id` を紐付けて
+#       初めてトラフィックが評価される。
+#       本 main.tf は backend_service を含まない最小デモ構成のため、policy 単体だけを作る。
+#       実環境では Cloud Armor を効かせる対象 (GLB 配下の backend service / NEG) で
+#       下記のような attachment ブロックを追加すること:
+#
+#         resource "google_compute_backend_service" "payment_api" {
+#           name            = "payment-api-bs"
+#           project         = var.project_id
+#           security_policy = google_compute_security_policy.main.id  # ← これがないと Cloud Armor は無効
+#           # backend / health_checks / load_balancing_scheme = "EXTERNAL_MANAGED" 等
+#         }
+#
+#       attachment 例は backend_service_attachment_example.tf.example として
+#       (本ファイルとは別に) サンプル提示する想定。本ファイルでは backend を作らない。
 # ----------------------------------------------
 resource "google_compute_security_policy" "main" {
   name        = "${var.project_name}-armor"
   project     = var.project_id
-  description = "Cloud Armor policy for payment platform"
+  description = "Cloud Armor policy TEMPLATE (must be attached to a backend_service to take effect; see comments above)"
 
   # OWASP マネージドルール (XSS / SQLi)
   rule {
