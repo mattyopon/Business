@@ -83,6 +83,10 @@ resource "aws_iam_role_policy_attachment" "audit_owner_readonly" {
 }
 
 # Step 4: PCI Assessment
+# Codex P2 対応 (2026-05-20): reports_bucket_name は assessment_reports_destination で
+# 必須なので、enable_pci_assessment=true かつ null だと plan/apply が必ず fail する。
+# variable validation は他 variable を参照できないため、resource lifecycle.precondition
+# で plan 時に明示的なエラーメッセージで失敗させる。デフォルトも false (variables.tf)。
 resource "aws_auditmanager_assessment" "pci" {
   count = var.enable && var.enable_pci_assessment ? 1 : 0
 
@@ -112,10 +116,18 @@ resource "aws_auditmanager_assessment" "pci" {
     }
   }
 
+  lifecycle {
+    precondition {
+      condition     = var.reports_bucket_name != null && var.reports_bucket_name != ""
+      error_message = "enable_pci_assessment=true のとき reports_bucket_name は必須 (Object Lock COMPLIANCE 推奨の S3 bucket 名を指定してください)"
+    }
+  }
+
   tags = var.tags
 }
 
 # Step 5: NIST 800-53 Assessment (オプション、J-SOX/内部統制で必要な場合)
+# Codex P2 対応: デフォルト false。明示的に有効化したいときだけ enable_nist_assessment=true + reports_bucket_name を渡す。
 resource "aws_auditmanager_assessment" "nist" {
   count = var.enable && var.enable_nist_assessment ? 1 : 0
 
@@ -142,6 +154,13 @@ resource "aws_auditmanager_assessment" "nist" {
       content {
         service_name = aws_services.value
       }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.reports_bucket_name != null && var.reports_bucket_name != ""
+      error_message = "enable_nist_assessment=true のとき reports_bucket_name は必須 (Object Lock COMPLIANCE 推奨の S3 bucket 名を指定してください)"
     }
   }
 

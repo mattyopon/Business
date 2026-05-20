@@ -29,7 +29,7 @@ variable "reports_bucket_name" {
 
 variable "enable_pci_assessment" {
   type        = bool
-  description = "PCI DSS assessment を有効化 (決済 PAN を扱う場合 true)"
+  description = "PCI DSS assessment を有効化 (決済 PAN を扱う場合 true)。有効化する場合は reports_bucket_name の指定が必須 (precondition で強制)"
   default     = false
 }
 
@@ -41,8 +41,8 @@ variable "pci_framework_name" {
 
 variable "enable_nist_assessment" {
   type        = bool
-  description = "NIST 800-53 r5 assessment を有効化 (J-SOX/内部統制重視)"
-  default     = true
+  description = "NIST 800-53 r5 assessment を有効化 (J-SOX/内部統制重視)。有効化する場合は reports_bucket_name の指定が必須 (precondition で強制)"
+  default     = false
 }
 
 variable "nist_framework_name" {

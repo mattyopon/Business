@@ -1,32 +1,32 @@
 output "cluster_identifier" {
   description = "Aurora Cluster Identifier"
-  value       = aws_rds_cluster.this.cluster_identifier
+  value       = local.cluster_identifier
 }
 
 output "cluster_endpoint" {
   description = "Aurora Cluster Writer Endpoint"
-  value       = aws_rds_cluster.this.endpoint
+  value       = local.cluster_endpoint
 }
 
 output "cluster_reader_endpoint" {
   description = "Aurora Cluster Reader Endpoint"
-  value       = aws_rds_cluster.this.reader_endpoint
+  value       = local.cluster_reader_endpoint
 }
 
 output "port" {
   description = "Aurora Port"
-  value       = aws_rds_cluster.this.port
+  value       = local.cluster_port
 }
 
 output "master_user_secret_arn" {
   description = "Master User Secret ARN (Secrets Manager)"
-  value       = aws_rds_cluster.this.master_user_secret[0].secret_arn
+  value       = local.cluster_master_user_secret[0].secret_arn
   sensitive   = true
 }
 
 output "cluster_arn" {
   description = "Aurora Cluster ARN"
-  value       = aws_rds_cluster.this.arn
+  value       = local.cluster_arn
 }
 
 output "instance_endpoints" {
@@ -36,7 +36,7 @@ output "instance_endpoints" {
 
 output "cluster_resource_id" {
   description = "Aurora cluster resource ID (IAM DB Auth で使用)"
-  value       = aws_rds_cluster.this.cluster_resource_id
+  value       = local.cluster_resource_id
 }
 
 output "global_cluster_id" {

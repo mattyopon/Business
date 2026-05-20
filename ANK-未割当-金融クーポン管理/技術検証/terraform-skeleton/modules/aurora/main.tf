@@ -112,7 +112,24 @@ resource "aws_rds_global_cluster" "this" {
   }
 }
 
-resource "aws_rds_cluster" "this" {
+# =============================================================================
+# Aurora cluster (Codex P1 対応 / 2026-05-20)
+#
+# engine_version の ignore_changes は **global cluster 配下の primary だけに限定**。
+# 理由: ignore_changes を無条件で付けると、global を使わない通常クラスタでも
+#   var.engine_version を変えても Terraform が反映しない状態になり、
+#   セキュリティパッチ含む engine upgrade を運用で当てられなくなる (Codex P1)。
+# 対応:
+#   - var.enable_global_database = false → aws_rds_cluster.standalone (engine_version は ignore しない)
+#   - var.enable_global_database = true  → aws_rds_cluster.global_primary (engine_version は ignore する)
+#   両者は属性的にほぼ同一だが、lifecycle.ignore_changes はリテラルしか書けないため
+#   Terraform の制約上 2 resource に分離するしかない (HCL 仕様)。
+# 下流参照は locals.cluster_* に集約し、消費側は分岐を意識しなくて済む。
+# =============================================================================
+
+resource "aws_rds_cluster" "standalone" {
+  count = var.enable_global_database ? 0 : 1
+
   cluster_identifier            = "${var.prefix}-aurora-cluster"
   engine                        = "aurora-postgresql"
   engine_version                = var.engine_version
@@ -120,9 +137,6 @@ resource "aws_rds_cluster" "this" {
   master_username               = var.master_username
   manage_master_user_password   = true
   master_user_secret_kms_key_id = var.kms_key_arn
-
-  # Aurora Global Database 連携: global cluster の primary cluster としてアタッチ
-  global_cluster_identifier = var.enable_global_database ? aws_rds_global_cluster.this[0].id : null
 
   storage_encrypted = true
   # 注意: Aurora の暗号化キーは作成時にしか指定できない (変更不可)
@@ -146,20 +160,64 @@ resource "aws_rds_cluster" "this" {
   enabled_cloudwatch_logs_exports     = ["postgresql"]
   iam_database_authentication_enabled = true
 
-  # FISC 第11版 / FSI Lens: 金融データへの全 SQL 操作証跡を Kinesis に出力 (改竄不能ストリーム)。
-  # 案件で必要な場合 env から activity_stream_kms_key_arn を設定すると有効化。
-  # (Activity Streams は async + sync の2モード、PCI-DSS では sync 推奨)
-  # 注: 別 resource で aws_rds_cluster_activity_stream を作る (cluster と分離 lifecycle のため)。
+  performance_insights_enabled          = var.performance_insights_enabled
+  performance_insights_kms_key_id       = var.performance_insights_enabled ? var.kms_key_arn : null
+  performance_insights_retention_period = var.performance_insights_enabled ? var.performance_insights_retention_period : null
+
+  lifecycle {
+    # engine_version は ignore しない: standalone は Terraform が engine_version を完全管理
+    ignore_changes = [
+      master_username,
+      final_snapshot_identifier,
+    ]
+  }
+
+  tags = var.tags
+}
+
+resource "aws_rds_cluster" "global_primary" {
+  count = var.enable_global_database ? 1 : 0
+
+  cluster_identifier            = "${var.prefix}-aurora-cluster"
+  engine                        = "aurora-postgresql"
+  engine_version                = var.engine_version
+  database_name                 = var.database_name
+  master_username               = var.master_username
+  manage_master_user_password   = true
+  master_user_secret_kms_key_id = var.kms_key_arn
+
+  # Aurora Global Database 連携: global cluster の primary cluster としてアタッチ
+  global_cluster_identifier = aws_rds_global_cluster.this[0].id
+
+  storage_encrypted = true
+  kms_key_id        = var.kms_key_arn
+
+  db_subnet_group_name            = var.db_subnet_group_name
+  vpc_security_group_ids          = var.security_group_ids
+  db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.this.name
+
+  backup_retention_period      = var.backup_retention_period
+  preferred_backup_window      = var.backup_window
+  preferred_maintenance_window = var.maintenance_window
+  copy_tags_to_snapshot        = true
+
+  deletion_protection       = var.deletion_protection
+  skip_final_snapshot       = !var.deletion_protection
+  final_snapshot_identifier = var.deletion_protection ? "${var.prefix}-final-${formatdate("YYYYMMDD-hhmmss", timestamp())}" : null
+
+  enabled_cloudwatch_logs_exports     = ["postgresql"]
+  iam_database_authentication_enabled = true
 
   performance_insights_enabled          = var.performance_insights_enabled
   performance_insights_kms_key_id       = var.performance_insights_enabled ? var.kms_key_arn : null
   performance_insights_retention_period = var.performance_insights_enabled ? var.performance_insights_retention_period : null
 
   lifecycle {
+    # global cluster 配下の primary は engine_version 変更が global 側 microversion で発生し drift する。
+    # 運用上 engine upgrade は aws_rds_global_cluster.this.engine_version を変更して適用する。
     ignore_changes = [
       master_username,
       final_snapshot_identifier,
-      # global cluster へ join 後は engine_version が global 側で管理されるため drift しがち
       engine_version,
     ]
   }
@@ -167,14 +225,28 @@ resource "aws_rds_cluster" "this" {
   tags = var.tags
 }
 
+# 下流参照集約: enable_global_database による分岐を1箇所に閉じ込める
+locals {
+  cluster_id                 = var.enable_global_database ? aws_rds_cluster.global_primary[0].id : aws_rds_cluster.standalone[0].id
+  cluster_identifier         = var.enable_global_database ? aws_rds_cluster.global_primary[0].cluster_identifier : aws_rds_cluster.standalone[0].cluster_identifier
+  cluster_engine             = var.enable_global_database ? aws_rds_cluster.global_primary[0].engine : aws_rds_cluster.standalone[0].engine
+  cluster_engine_version     = var.enable_global_database ? aws_rds_cluster.global_primary[0].engine_version : aws_rds_cluster.standalone[0].engine_version
+  cluster_endpoint           = var.enable_global_database ? aws_rds_cluster.global_primary[0].endpoint : aws_rds_cluster.standalone[0].endpoint
+  cluster_reader_endpoint    = var.enable_global_database ? aws_rds_cluster.global_primary[0].reader_endpoint : aws_rds_cluster.standalone[0].reader_endpoint
+  cluster_port               = var.enable_global_database ? aws_rds_cluster.global_primary[0].port : aws_rds_cluster.standalone[0].port
+  cluster_arn                = var.enable_global_database ? aws_rds_cluster.global_primary[0].arn : aws_rds_cluster.standalone[0].arn
+  cluster_resource_id        = var.enable_global_database ? aws_rds_cluster.global_primary[0].cluster_resource_id : aws_rds_cluster.standalone[0].cluster_resource_id
+  cluster_master_user_secret = var.enable_global_database ? aws_rds_cluster.global_primary[0].master_user_secret : aws_rds_cluster.standalone[0].master_user_secret
+}
+
 resource "aws_rds_cluster_instance" "this" {
   count = var.instance_count
 
   identifier         = "${var.prefix}-aurora-${count.index + 1}"
-  cluster_identifier = aws_rds_cluster.this.id
+  cluster_identifier = local.cluster_id
   instance_class     = var.instance_class
-  engine             = aws_rds_cluster.this.engine
-  engine_version     = aws_rds_cluster.this.engine_version
+  engine             = local.cluster_engine
+  engine_version     = local.cluster_engine_version
 
   db_parameter_group_name = aws_db_parameter_group.this.name
   monitoring_interval     = var.enhanced_monitoring_interval
@@ -195,7 +267,7 @@ resource "aws_rds_cluster_instance" "this" {
 resource "aws_rds_cluster_activity_stream" "this" {
   count = var.activity_stream_kms_key_arn != null ? 1 : 0
 
-  resource_arn = aws_rds_cluster.this.arn
+  resource_arn = local.cluster_arn
   mode         = var.activity_stream_mode # "sync" (PCI推奨) or "async"
   kms_key_id   = var.activity_stream_kms_key_arn
 
