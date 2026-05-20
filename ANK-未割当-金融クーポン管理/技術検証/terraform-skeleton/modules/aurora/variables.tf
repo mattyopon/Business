@@ -110,6 +110,28 @@ variable "enhanced_monitoring_role_arn" {
   default     = null
 }
 
+variable "pgaudit_log_classes" {
+  type        = string
+  description = "pgaudit.log の値。FISC/PCI 監査要件で必要なクラスを指定。デフォルトは DDL+WRITE+ROLE (READ を含めると I/O 激増)。許容値: READ, WRITE, FUNCTION, ROLE, DDL, MISC, MISC_SET, ALL"
+  default     = "ddl,write,role"
+}
+
+variable "activity_stream_kms_key_arn" {
+  type        = string
+  description = "RDS Database Activity Streams 用 KMS Key ARN。指定すると Activity Streams が有効化される (PCI-DSS Req10 / FISC 第11版 4.5 の改竄不能監査証跡対応)。null で無効。"
+  default     = null
+}
+
+variable "activity_stream_mode" {
+  type        = string
+  description = "Activity Streams のモード。sync = PCI-DSS 推奨 (Kinesis 失敗で DB トランザクション失敗)、async = 性能優先"
+  default     = "sync"
+  validation {
+    condition     = contains(["sync", "async"], var.activity_stream_mode)
+    error_message = "activity_stream_mode は sync または async である必要があります。"
+  }
+}
+
 variable "tags" {
   type        = map(string)
   description = "追加タグ"

@@ -5,10 +5,10 @@ data "aws_availability_zones" "available" {
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
 
-  public_subnet_cidrs   = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i)]
-  app_subnet_cidrs      = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 4)]
-  db_subnet_cidrs       = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 8)]
-  batch_subnet_cidrs    = var.create_isolated_batch_subnet ? [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 12)] : []
+  public_subnet_cidrs = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i)]
+  app_subnet_cidrs    = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 4)]
+  db_subnet_cidrs     = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 8)]
+  batch_subnet_cidrs  = var.create_isolated_batch_subnet ? [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 12)] : []
 }
 
 resource "aws_vpc" "this" {
@@ -91,8 +91,9 @@ resource "aws_cloudwatch_log_group" "flow_logs" {
 }
 
 resource "aws_iam_role" "flow_logs" {
-  count = var.enable_flow_logs ? 1 : 0
-  name  = "${var.prefix}-vpc-flow-logs-role"
+  count                = var.enable_flow_logs ? 1 : 0
+  name                 = "${var.prefix}-vpc-flow-logs-role"
+  permissions_boundary = var.iam_role_permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

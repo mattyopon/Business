@@ -8,9 +8,21 @@ terraform {
   }
 }
 
+locals {
+  # cicd_apply_min ポリシーで CreateRole に boundary 必須 Deny を付与しているため、
+  # 本モジュール内で作成する全 IAM Role に boundary を付ける必要がある。
+  # 優先順位: 外部指定 (var) > 本モジュールの cicd_apply_boundary > null (create_cicd_roles=false 時のみ)
+  effective_role_boundary_arn = (
+    var.iam_role_permissions_boundary_arn != null
+    ? var.iam_role_permissions_boundary_arn
+    : (var.create_cicd_roles ? aws_iam_policy.cicd_apply_boundary[0].arn : null)
+  )
+}
+
 # ECS Task Execution Role (共通)
 resource "aws_iam_role" "ecs_execution" {
-  name = "${var.prefix}-ecs-execution-role"
+  name                 = "${var.prefix}-ecs-execution-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -51,7 +63,8 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
 
 # Aurora Enhanced Monitoring Role
 resource "aws_iam_role" "aurora_monitoring" {
-  name = "${var.prefix}-aurora-monitoring-role"
+  name                 = "${var.prefix}-aurora-monitoring-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -87,7 +100,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 resource "aws_iam_role" "cicd_plan" {
   count = var.create_cicd_roles ? 1 : 0
 
-  name = "${var.prefix}-cicd-plan-role"
+  name                 = "${var.prefix}-cicd-plan-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -118,11 +132,36 @@ resource "aws_iam_role_policy_attachment" "cicd_plan_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
+# ReadOnlyAccess は DynamoDB の Put/DeleteItem を含まないため、
+# Terraform S3 backend の state lock 取得/解放のための最小権限を別途付与する。
+resource "aws_iam_role_policy" "cicd_plan_state_lock" {
+  count = var.create_cicd_roles ? 1 : 0
+
+  name = "${var.prefix}-cicd-plan-state-lock-policy"
+  role = aws_iam_role.cicd_plan[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "AllowStateLockTableAccess"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:DescribeTable",
+      ]
+      Resource = "arn:aws:dynamodb:*:${var.aws_account_id}:table/${var.prefix}-tf-state-lock"
+    }]
+  })
+}
+
 # CI/CD Apply Role (環境別、最小権限のみ)
 resource "aws_iam_role" "cicd_apply" {
   count = var.create_cicd_roles ? 1 : 0
 
-  name = "${var.prefix}-cicd-apply-role"
+  name                 = "${var.prefix}-cicd-apply-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -146,8 +185,180 @@ resource "aws_iam_role" "cicd_apply" {
   tags = var.tags
 }
 
+# apply 用 Permissions Boundary。
+# このスタックが作成する IAM Role/User に必ず付与し、特権昇格 (Allow="*"/PassRole 抜け道) を遮断する。
+resource "aws_iam_policy" "cicd_apply_boundary" {
+  count = var.create_cicd_roles ? 1 : 0
+
+  name        = "${var.prefix}-cicd-apply-boundary"
+  description = "Permissions boundary for IAM principals managed by this stack. Blocks privilege escalation."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowScopedStackServices"
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "rds:*",
+          "rds-data:*",
+          "s3:*",
+          "ecs:*",
+          "ecr:Get*",
+          "ecr:BatchGet*",
+          "ecr:BatchCheck*", # AmazonECSTaskExecutionRolePolicy が要求する BatchCheckLayerAvailability を含む
+          "ecr:Describe*",
+          "ecr:List*",
+          "route53:*",
+          "elasticloadbalancing:*",
+          "autoscaling:*",
+          "application-autoscaling:*",
+          "logs:*",
+          "cloudwatch:*",
+          "sns:*",
+          "ce:*",
+          "ssm:Get*",
+          "ssm:Describe*",
+          "ssm:List*",
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "secretsmanager:Get*",
+          "secretsmanager:Describe*",
+          "secretsmanager:List*",
+          "kms:Decrypt",
+          "kms:Describe*",
+          "kms:GenerateDataKey*",
+          "kms:List*",
+          # AWS サービス統合 (Aurora/RDS/S3/CloudWatch/SNS 等) が CMK を使う際の必須権限
+          "kms:CreateGrant",
+          "kms:RevokeGrant",
+          "kms:ListGrants",
+          # Terraform S3 backend の state lock 用 (DynamoDB)
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable",
+          "iam:Get*",
+          "iam:List*",
+          "iam:PassRole",
+          "iam:CreateRole",
+          "iam:UpdateRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:CreatePolicy",
+          "iam:DeletePolicy",
+          "iam:CreatePolicyVersion",
+          "iam:DeletePolicyVersion",
+          "iam:SetDefaultPolicyVersion",
+          "iam:CreateServiceLinkedRole",
+          # 既存ロールへの boundary 付与/変更を許可 (boundary 自身が intersection を取るため必要)。
+          "iam:PutRolePermissionsBoundary",
+          # 本モジュールはタグ付き IAM Policy (cicd_apply_boundary 等) を作成するため必須
+          "iam:TagPolicy",
+          "iam:UntagPolicy",
+          "sts:GetCallerIdentity",
+          "sts:DecodeAuthorizationMessage",
+        ]
+        Resource = "*"
+      },
+      {
+        # 注意: OIDC Provider 管理 (iam:*OpenIDConnectProvider) は本モジュールが
+        # create_github_oidc_provider=true 時に管理するため、ここで Deny しない。
+        # 代わりに AllowGithubOidcProviderManagement (下方) で github のみに scope する。
+        Sid      = "DenyPrivilegeEscalation"
+        Effect   = "Deny"
+        Resource = "*"
+        Action = [
+          "iam:CreateUser",
+          "iam:CreateAccessKey",
+          "iam:DeleteUser",
+          "iam:CreateLoginProfile",
+          "iam:UpdateLoginProfile",
+          "iam:DeleteLoginProfile",
+          "iam:CreateSAMLProvider",
+          "iam:UpdateSAMLProvider",
+          "iam:DeleteSAMLProvider",
+          "iam:AttachUserPolicy",
+          "iam:PutUserPolicy",
+        ]
+      },
+      {
+        # GitHub Actions OIDC Provider のみ管理可能。他の任意 OIDC 作成は遮断するため、
+        # Resource ARN を GitHub Actions の固定値に scope する。
+        Sid      = "AllowGithubOidcProviderManagement"
+        Effect   = "Allow"
+        Action   = ["iam:CreateOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint", "iam:DeleteOpenIDConnectProvider", "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider", "iam:AddClientIDToOpenIDConnectProvider", "iam:RemoveClientIDFromOpenIDConnectProvider"]
+        Resource = "arn:aws:iam::${var.aws_account_id}:oidc-provider/token.actions.githubusercontent.com"
+      },
+      {
+        # 注意: s3:PutBucketPolicy は modules/s3 が aws_s3_bucket_policy を扱うため
+        #       deny しない (Deny は Allow を上書きするためブロック必須運用が崩れる)。
+        #       バケットポリシー逸脱検知は AWS Config Rule 側で実施する想定。
+        Sid      = "DenyDestructiveAndAuditDisable"
+        Effect   = "Deny"
+        Resource = "*"
+        Action = [
+          "iam:DeleteRole",
+          "iam:DeleteRolePermissionsBoundary",
+          "kms:ScheduleKeyDeletion",
+          "kms:DisableKey",
+          "s3:DeleteBucket",
+          "rds:DeleteDBCluster",
+          "rds:DeleteDBInstance",
+          "rds:ModifyDBClusterSnapshotAttribute",
+          "secretsmanager:DeleteSecret",
+          "cloudtrail:StopLogging",
+          "cloudtrail:DeleteTrail",
+          "cloudtrail:PutEventSelectors",
+          "config:DeleteConfigRule",
+          "config:DeleteConfigurationRecorder",
+          "config:DeleteDeliveryChannel",
+          "config:StopConfigurationRecorder",
+          "guardduty:DeleteDetector",
+          "guardduty:DisassociateFromMasterAccount",
+          "securityhub:DisableSecurityHub",
+        ]
+      },
+      {
+        Sid      = "DenyOrganizationAndAccount"
+        Effect   = "Deny"
+        Resource = "*"
+        Action = [
+          "organizations:*",
+          "account:*",
+          "billing:*",
+          "aws-portal:*",
+        ]
+      },
+      {
+        Sid    = "RequireBoundaryOnNewIamPrincipals"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateRole",
+          "iam:PutRolePermissionsBoundary",
+        ]
+        Resource = "*"
+        Condition = {
+          StringNotEquals = {
+            "iam:PermissionsBoundary" = "arn:aws:iam::${var.aws_account_id}:policy/${var.prefix}-cicd-apply-boundary"
+          }
+        }
+      },
+    ]
+  })
+
+  tags = var.tags
+}
+
 # apply 用の権限は環境別最小限。実装は別ファイルで管理推奨。
-# 例として PowerUser + IAM 制限を付与 (本番では環境別に最小化)
+# 重要: Action="*" は禁止。スタックが実際に管理するサービスのみ Allow し、
+#       Deny ブロックで特権昇格と監査無効化を多層的に防ぐ。
 resource "aws_iam_role_policy" "cicd_apply_min" {
   count = var.create_cicd_roles ? 1 : 0
 
@@ -158,21 +369,168 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = "*"
+        Sid    = "AllowScopedStackServices"
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "rds:*",
+          "rds-data:*",
+          "s3:*",
+          "ecs:*",
+          "ecr:Get*",
+          "ecr:BatchGet*",
+          "ecr:BatchCheck*", # AmazonECSTaskExecutionRolePolicy が要求する BatchCheckLayerAvailability を含む
+          "ecr:Describe*",
+          "ecr:List*",
+          "route53:*",
+          "elasticloadbalancing:*",
+          "autoscaling:*",
+          "application-autoscaling:*",
+          "logs:*",
+          "cloudwatch:*",
+          "sns:*",
+          "ce:*",
+          "ssm:Get*",
+          "ssm:Describe*",
+          "ssm:List*",
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "secretsmanager:Get*",
+          "secretsmanager:Describe*",
+          "secretsmanager:List*",
+          "kms:Decrypt",
+          "kms:Describe*",
+          "kms:GenerateDataKey*",
+          "kms:List*",
+          # AWS サービス統合 (Aurora/RDS/S3/CloudWatch/SNS 等) が CMK を使う際の必須権限
+          "kms:CreateGrant",
+          "kms:RevokeGrant",
+          "kms:ListGrants",
+        ]
         Resource = "*"
       },
-      # 重要: 以下を明示的に Deny する (例)
       {
-        Effect = "Deny"
+        # Terraform S3 backend の state lock (DynamoDB) アクセス。テーブル名は env/prefix で命名統一されている想定。
+        Sid    = "AllowDynamoDBStateLock"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable",
+        ]
+        Resource = "arn:aws:dynamodb:*:${var.aws_account_id}:table/${var.prefix}-tf-state-lock"
+      },
+      {
+        Sid    = "AllowIamForStackResources"
+        Effect = "Allow"
+        Action = [
+          "iam:Get*",
+          "iam:List*",
+          "iam:CreateRole",
+          "iam:UpdateRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:CreatePolicy",
+          "iam:DeletePolicy",
+          "iam:CreatePolicyVersion",
+          "iam:DeletePolicyVersion",
+          "iam:SetDefaultPolicyVersion",
+          "iam:CreateServiceLinkedRole",
+          # 既存ロールに boundary を新規付与/変更するために必要。
+          # 同ポリシー下方の RequireBoundaryOnRoleCreate Deny で正しい boundary 以外は弾く。
+          "iam:PutRolePermissionsBoundary",
+          # 本モジュールはタグ付き IAM Policy (cicd_apply_boundary 等) を作成するため必須
+          "iam:TagPolicy",
+          "iam:UntagPolicy",
+        ]
+        Resource = [
+          "arn:aws:iam::${var.aws_account_id}:role/${var.prefix}-*",
+          "arn:aws:iam::${var.aws_account_id}:policy/${var.prefix}-*",
+          "arn:aws:iam::${var.aws_account_id}:role/aws-service-role/*",
+        ]
+      },
+      {
+        Sid      = "AllowPassRoleForStackOnly"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:aws:iam::${var.aws_account_id}:role/${var.prefix}-*"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = [
+              "ecs-tasks.amazonaws.com",
+              "monitoring.rds.amazonaws.com",
+              "rds.amazonaws.com",
+              "ec2.amazonaws.com",
+              "lambda.amazonaws.com",
+              "events.amazonaws.com",
+              # modules/vpc が aws_flow_log で flow_logs role を VPC Flow Logs サービスに渡す
+              "vpc-flow-logs.amazonaws.com",
+            ]
+          }
+        }
+      },
+      {
+        # 期待する boundary は local.effective_role_boundary_arn (外部指定優先、なければ自モジュール作成)。
+        # 全 IAM ロールはこの local を介して boundary を付けるため、Deny 条件もここを参照する。
+        Sid      = "RequireBoundaryOnRoleCreate"
+        Effect   = "Deny"
+        Action   = ["iam:CreateRole", "iam:PutRolePermissionsBoundary"]
+        Resource = "*"
+        Condition = {
+          StringNotEquals = {
+            "iam:PermissionsBoundary" = local.effective_role_boundary_arn
+          }
+        }
+      },
+      {
+        # 注意: OIDC Provider 管理は AllowGithubOidcProviderManagement (boundary 側) と
+        #       対称に scope する。ここでは Deny しない (Deny は Allow を上書きするため)。
+        # 注意: s3:PutBucketPolicy も modules/s3 が必要とするため Deny しない。
+        Sid      = "DenyDestructiveAndAuditDisable"
+        Effect   = "Deny"
+        Resource = "*"
         Action = [
           "iam:DeleteRole",
           "iam:DeleteUser",
+          "iam:CreateUser",
+          "iam:CreateAccessKey",
+          "iam:CreateLoginProfile",
+          "iam:CreateSAMLProvider",
+          "iam:DeleteRolePermissionsBoundary",
           "kms:ScheduleKeyDeletion",
-          "s3:DeleteBucket",  # PROD では特に保護
+          "kms:DisableKey",
+          "s3:DeleteBucket",
+          "rds:DeleteDBCluster",
+          "rds:DeleteDBInstance",
+          "secretsmanager:DeleteSecret",
+          "cloudtrail:StopLogging",
+          "cloudtrail:DeleteTrail",
+          "config:DeleteConfigRule",
+          "config:DeleteConfigurationRecorder",
+          "config:DeleteDeliveryChannel",
+          "config:StopConfigurationRecorder",
+          "guardduty:DeleteDetector",
+          "guardduty:DisassociateFromMasterAccount",
+          "securityhub:DisableSecurityHub",
+          "organizations:*",
+          "account:*",
+          "billing:*",
+          "aws-portal:*",
         ]
-        Resource = "*"
-      }
+      },
+      {
+        # GitHub Actions OIDC Provider のみ scope して許可 (boundary との対称)。
+        Sid      = "AllowGithubOidcProviderManagement"
+        Effect   = "Allow"
+        Action   = ["iam:CreateOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint", "iam:DeleteOpenIDConnectProvider", "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider", "iam:AddClientIDToOpenIDConnectProvider", "iam:RemoveClientIDFromOpenIDConnectProvider"]
+        Resource = "arn:aws:iam::${var.aws_account_id}:oidc-provider/token.actions.githubusercontent.com"
+      },
     ]
   })
 }

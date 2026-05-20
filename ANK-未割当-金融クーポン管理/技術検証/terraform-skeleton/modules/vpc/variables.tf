@@ -52,6 +52,12 @@ variable "kms_key_arn" {
   default     = null
 }
 
+variable "iam_role_permissions_boundary_arn" {
+  type        = string
+  description = "VPC Flow Logs Role 等、本モジュールが作成する IAM Role に付与する Permissions Boundary ARN。iam モジュールの cicd_apply_boundary と同一を指す想定。CI 側の RequireBoundaryOnRoleCreate Deny を満たすため必須。"
+  default     = null
+}
+
 variable "tags" {
   type        = map(string)
   description = "追加タグ"

@@ -1,0 +1,112 @@
+name: coupon Terraform Plan
+
+on:
+  pull_request:
+    paths:
+      - 'ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/**'
+      - '.github/workflows/coupon-terraform-*.yml'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TF_BASE: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton
+
+# 各 env 用 TF_VAR は jobs 内 step で動的注入する (matrix.env を参照するため)。
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # environments/ 配下に実在するディレクトリのみ。mut/lt/st 追加時にここを拡張する。
+        env: [prod]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.x"
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_COUPON_{0}', matrix.env)] }}:role/coupon-${{ matrix.env }}-cicd-plan-role
+          aws-region: ap-northeast-1
+
+      - name: Terraform Format Check
+        run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" init
+
+      # IAM Role 全てに付与する Permissions Boundary ARN を環境別 secret から TF_VAR として供給する。
+      # 未設定で apply するとIAM Deny で失敗するため、設定漏れは早期に検出される。
+      - name: Export TF_VAR (boundary ARN)
+        run: |
+          echo "TF_VAR_iam_role_permissions_boundary_arn=${{ secrets[format('IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_{0}', matrix.env)] }}" >> "$GITHUB_ENV"
+
+      # required な tfvars (cost_center / vpc_cidr / KMS ARNs / sg_aurora_id 等) を
+      # 環境別 multi-line secret COUPON_TFVARS_<ENV> (HCL の terraform.tfvars 形式) から
+      # ファイル化する。未設定の場合は terraform plan が required variable で落ちる (=fail-fast)。
+      # 重要: secret は env 経由で渡し、bash の引用符破壊や $ 展開を防ぐ
+      # (run の中で `${{ secrets.X }}` を直接 quote で囲うと HCL の "..." を shell が食って壊す)。
+      - name: Prepare terraform.tfvars from secret
+        shell: bash
+        env:
+          TFVARS_CONTENT: ${{ secrets[format('COUPON_TFVARS_{0}', matrix.env)] }}
+          TFVARS_PATH: ${{ matrix.env }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TFVARS_CONTENT:-}" ]]; then
+            echo "::warning::secret COUPON_TFVARS_${TFVARS_PATH} is empty. terraform plan will fail with required-variable errors. Set this secret with the HCL content of terraform.tfvars."
+          fi
+          printf '%s\n' "${TFVARS_CONTENT:-}" > "${TF_BASE}/environments/${TFVARS_PATH}/terraform.tfvars"
+
+      - name: Terraform Validate
+        run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" validate
+
+      - name: tflint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Run tflint
+        run: |
+          cd "${TF_BASE}"
+          tflint --init
+          tflint --recursive
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton
+          soft_fail: false
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/environments/${{ matrix.env }}
+          framework: terraform
+          soft_fail: false
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" plan \
+            -out=tfplan \
+            -no-color \
+            -input=false
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coupon-tfplan-${{ matrix.env }}-${{ github.run_id }}
+          path: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/environments/${{ matrix.env }}/tfplan
+          retention-days: 30
