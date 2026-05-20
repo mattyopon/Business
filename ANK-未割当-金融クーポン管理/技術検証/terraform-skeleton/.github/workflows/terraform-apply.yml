@@ -1,0 +1,103 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Target Environment'
+        required: true
+        type: choice
+        options:
+          - mut
+          - lt
+          - st
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  check-change-calendar:
+    runs-on: ubuntu-latest
+    outputs:
+      can_deploy: ${{ steps.cal.outputs.can_deploy }}
+    steps:
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_{0}', inputs.env)] }}:role/coupon-${{ inputs.env }}-cicd-apply-role
+          aws-region: ap-northeast-1
+
+      - name: Check Change Calendar (PROD only)
+        id: cal
+        run: |
+          set -e
+          if [[ "${{ inputs.env }}" == "prod" ]]; then
+            STATE=$(aws ssm get-calendar-state \
+              --calendar-names \
+                "arn:aws:ssm:ap-northeast-1::document/coupon-prod-deploy-calendar" \
+                "arn:aws:ssm:ap-northeast-1::document/coupon-freeze-yearend" \
+                "arn:aws:ssm:ap-northeast-1::document/coupon-freeze-monthend" \
+              --query 'State' --output text)
+            echo "Calendar state: $STATE"
+            if [[ "$STATE" != "OPEN" ]]; then
+              echo "::error::Deploy not allowed. Calendar is CLOSED."
+              echo "can_deploy=false" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          fi
+          echo "can_deploy=true" >> $GITHUB_OUTPUT
+
+  apply:
+    runs-on: ubuntu-latest
+    needs: check-change-calendar
+    if: needs.check-change-calendar.outputs.can_deploy == 'true'
+    environment:
+      name: ${{ inputs.env }}
+      # GitHub Environment 設定で承認者を指定 (PROD は 2 名)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.x"
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_{0}', inputs.env)] }}:role/coupon-${{ inputs.env }}-cicd-apply-role
+          aws-region: ap-northeast-1
+
+      - name: Terraform Init
+        run: terraform -chdir=terraform-skeleton/environments/${{ inputs.env }} init
+
+      - name: Terraform Plan
+        run: |
+          terraform -chdir=terraform-skeleton/environments/${{ inputs.env }} plan \
+            -out=tfplan \
+            -input=false
+
+      - name: Terraform Apply
+        id: apply
+        run: |
+          terraform -chdir=terraform-skeleton/environments/${{ inputs.env }} apply \
+            -input=false \
+            tfplan 2>&1 | tee /tmp/apply.log
+
+      - name: Save Apply Log to S3
+        if: always()
+        run: |
+          aws s3 cp /tmp/apply.log \
+            s3://coupon-${{ inputs.env }}-audit-logs/cicd-logs/$(date +%Y/%m/%d)/apply-${{ github.run_id }}.log
+
+      - name: Notify Slack
+        if: always()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
+          SLACK_TITLE: 'Terraform Apply ${{ inputs.env }} (${{ job.status }})'
+          SLACK_MESSAGE: 'Run ID: ${{ github.run_id }}'
+          SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}

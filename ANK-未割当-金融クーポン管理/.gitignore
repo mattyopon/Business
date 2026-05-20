@@ -1,0 +1,29 @@
+# 内部作業用ファイル (公開しない)
+商談用/資料/GenSpark_プロンプト.md
+PM向け/07a_個別プロファイル_Restricted.md
+
+# 一時ファイル
+*.tmp
+*.bak
+*.swp
+.DS_Store
+
+# OS
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+!**/*.tfvars.example
+**/.terraform.lock.hcl
+**/crash.log
+**/tfplan
+
+# Logs
+*.log

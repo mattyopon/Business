@@ -1,0 +1,13 @@
+# PROD 環境用変数例 (本ファイルはサンプル、実際の値は別管理 + gitignore)
+region      = "ap-northeast-1"
+cost_center = "XXXXX"
+repo_url    = "https://github.com/{org}/coupon-iac"
+vpc_cidr    = "10.0.0.0/20"
+
+kms_key_arn_aurora     = "arn:aws:kms:ap-northeast-1:XXXX:key/XXXX"
+kms_key_arn_s3_audit   = "arn:aws:kms:ap-northeast-1:XXXX:key/XXXX"
+kms_key_arn_s3_general = "arn:aws:kms:ap-northeast-1:XXXX:key/XXXX"
+kms_key_arn_cw_logs    = "arn:aws:kms:ap-northeast-1:XXXX:key/XXXX"
+
+sg_aurora_id                   = "sg-XXXXXXX"
+iam_role_aurora_monitoring_arn = "arn:aws:iam::XXXX:role/coupon-prod-aurora-monitoring-role"
