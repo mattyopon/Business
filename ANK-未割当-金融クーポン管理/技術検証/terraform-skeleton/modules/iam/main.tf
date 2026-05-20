@@ -183,6 +183,7 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
           "ecs:*",
           "ecr:Get*",
           "ecr:BatchGet*",
+          "ecr:BatchCheck*", # AmazonECSTaskExecutionRolePolicy が要求する BatchCheckLayerAvailability を含む
           "ecr:Describe*",
           "ecr:List*",
           "route53:*",
@@ -334,6 +335,7 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
           "ecs:*",
           "ecr:Get*",
           "ecr:BatchGet*",
+          "ecr:BatchCheck*", # AmazonECSTaskExecutionRolePolicy が要求する BatchCheckLayerAvailability を含む
           "ecr:Describe*",
           "ecr:List*",
           "route53:*",
@@ -409,13 +411,15 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
         }
       },
       {
+        # 期待する boundary は local.effective_role_boundary_arn (外部指定優先、なければ自モジュール作成)。
+        # 全 IAM ロールはこの local を介して boundary を付けるため、Deny 条件もここを参照する。
         Sid      = "RequireBoundaryOnRoleCreate"
         Effect   = "Deny"
         Action   = ["iam:CreateRole", "iam:PutRolePermissionsBoundary"]
         Resource = "*"
         Condition = {
           StringNotEquals = {
-            "iam:PermissionsBoundary" = aws_iam_policy.cicd_apply_boundary[0].arn
+            "iam:PermissionsBoundary" = local.effective_role_boundary_arn
           }
         }
       },
