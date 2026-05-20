@@ -259,6 +259,9 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
           "iam:CreateServiceLinkedRole",
           # 既存ロールへの boundary 付与/変更を許可 (boundary 自身が intersection を取るため必要)。
           "iam:PutRolePermissionsBoundary",
+          # 本モジュールはタグ付き IAM Policy (cicd_apply_boundary 等) を作成するため必須
+          "iam:TagPolicy",
+          "iam:UntagPolicy",
           "sts:GetCallerIdentity",
           "sts:DecodeAuthorizationMessage",
         ]
@@ -442,6 +445,9 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
           # 既存ロールに boundary を新規付与/変更するために必要。
           # 同ポリシー下方の RequireBoundaryOnRoleCreate Deny で正しい boundary 以外は弾く。
           "iam:PutRolePermissionsBoundary",
+          # 本モジュールはタグ付き IAM Policy (cicd_apply_boundary 等) を作成するため必須
+          "iam:TagPolicy",
+          "iam:UntagPolicy",
         ]
         Resource = [
           "arn:aws:iam::${var.aws_account_id}:role/${var.prefix}-*",
