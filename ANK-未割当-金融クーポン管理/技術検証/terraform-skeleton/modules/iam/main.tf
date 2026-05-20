@@ -414,6 +414,8 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
               "ec2.amazonaws.com",
               "lambda.amazonaws.com",
               "events.amazonaws.com",
+              # modules/vpc が aws_flow_log で flow_logs role を VPC Flow Logs サービスに渡す
+              "vpc-flow-logs.amazonaws.com",
             ]
           }
         }
