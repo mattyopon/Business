@@ -403,6 +403,9 @@ module "aurora" {
 ```
 
 ### 11.2 アップデートフロー
+
+![Terraform モジュール更新フロー](../../figures/21_module_update_flow.png)
+
 1. モジュール変更 → PR
 2. MUT / LT で動作確認
 3. Tag 作成 (v1.X.Y)
