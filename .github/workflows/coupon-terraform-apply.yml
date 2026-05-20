@@ -74,6 +74,11 @@ jobs:
       - name: Terraform Init
         run: terraform -chdir="${TF_BASE}/environments/${{ inputs.env }}" init
 
+      # IAM Role 全てに付与する Permissions Boundary ARN を環境別 secret から TF_VAR として供給する。
+      - name: Export TF_VAR (boundary ARN)
+        run: |
+          echo "TF_VAR_iam_role_permissions_boundary_arn=${{ secrets[format('IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_{0}', inputs.env)] }}" >> "$GITHUB_ENV"
+
       - name: Terraform Plan
         run: |
           terraform -chdir="${TF_BASE}/environments/${{ inputs.env }}" plan \

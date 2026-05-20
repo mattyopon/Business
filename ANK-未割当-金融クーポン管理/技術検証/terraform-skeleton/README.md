@@ -62,6 +62,14 @@ terraform apply tfplan
 
 `secrets.AWS_ACCOUNT_COUPON_<env>` 命名で本案件専用の AWS account ID を mono-repo 全体で衝突しないよう分離している。
 
+必須 secret 一覧:
+
+| Secret 名 | 用途 |
+|---|---|
+| `AWS_ACCOUNT_COUPON_<env>` | OIDC AssumeRole 対象アカウント ID |
+| `IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_<env>` | 環境別 IAM Permissions Boundary ARN。PF 提供 or iam モジュール作成の cicd_apply_boundary ARN を指す。未設定だと apply は IAM Deny で失敗する |
+| `SLACK_WEBHOOK_OPS` | Slack 通知 webhook URL |
+
 ### モジュール参照例
 
 ```hcl

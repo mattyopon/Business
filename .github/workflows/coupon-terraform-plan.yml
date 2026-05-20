@@ -14,6 +14,8 @@ permissions:
 env:
   TF_BASE: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton
 
+# 各 env 用 TF_VAR は jobs 内 step で動的注入する (matrix.env を参照するため)。
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -43,6 +45,12 @@ jobs:
 
       - name: Terraform Init
         run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" init
+
+      # IAM Role 全てに付与する Permissions Boundary ARN を環境別 secret から TF_VAR として供給する。
+      # 未設定で apply するとIAM Deny で失敗するため、設定漏れは早期に検出される。
+      - name: Export TF_VAR (boundary ARN)
+        run: |
+          echo "TF_VAR_iam_role_permissions_boundary_arn=${{ secrets[format('IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_{0}', matrix.env)] }}" >> "$GITHUB_ENV"
 
       - name: Terraform Validate
         run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" validate

@@ -51,5 +51,6 @@ variable "iam_role_aurora_monitoring_arn" {
 
 variable "iam_role_permissions_boundary_arn" {
   type        = string
-  description = "本環境で作成する IAM Role 全てに付与する Permissions Boundary ARN。CI apply role 側の RequireBoundaryOnRoleCreate Deny を満たすため、IAM Role を作るモジュール (vpc flow_logs / iam 配下のロール) に必ず渡す。PF 集中の場合は PF が用意した boundary、案件で作成する場合は iam モジュールの cicd_apply_boundary を指す。"
+  description = "本環境で作成する IAM Role 全てに付与する Permissions Boundary ARN。CI apply role 側の RequireBoundaryOnRoleCreate Deny を満たすため、IAM Role を作るモジュール (vpc flow_logs / iam 配下のロール) に必ず渡す。PF 集中の場合は PF が用意した boundary、案件で作成する場合は iam モジュールの cicd_apply_boundary を指す。CI からは secrets.IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_<env> を TF_VAR 経由で供給する。default=null は plan を通すための便宜であり、未指定での apply は IAM Deny で必ず失敗する (=設定漏れを早期検出する設計)。"
+  default     = null
 }
