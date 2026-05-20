@@ -39,6 +39,11 @@ variable "github_repo" {
   default     = ""
 }
 
+variable "aws_account_id" {
+  type        = string
+  description = "本モジュールをデプロイする AWS アカウント ID (CI/CD Apply Role の Resource ARN 解決に使用)"
+}
+
 variable "tags" {
   type        = map(string)
   description = "追加タグ"

@@ -5,10 +5,10 @@ data "aws_availability_zones" "available" {
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
 
-  public_subnet_cidrs   = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i)]
-  app_subnet_cidrs      = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 4)]
-  db_subnet_cidrs       = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 8)]
-  batch_subnet_cidrs    = var.create_isolated_batch_subnet ? [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 12)] : []
+  public_subnet_cidrs = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i)]
+  app_subnet_cidrs    = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 4)]
+  db_subnet_cidrs     = [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 8)]
+  batch_subnet_cidrs  = var.create_isolated_batch_subnet ? [for i in range(var.az_count) : cidrsubnet(var.vpc_cidr, 4, i + 12)] : []
 }
 
 resource "aws_vpc" "this" {

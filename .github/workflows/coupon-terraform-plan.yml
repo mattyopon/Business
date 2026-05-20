@@ -1,15 +1,18 @@
-name: Terraform Plan
+name: coupon Terraform Plan
 
 on:
   pull_request:
     paths:
-      - 'terraform-skeleton/**'
-      - '.github/workflows/terraform-*.yml'
+      - 'ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/**'
+      - '.github/workflows/coupon-terraform-*.yml'
 
 permissions:
   id-token: write
   contents: read
   pull-requests: write
+
+env:
+  TF_BASE: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton
 
 jobs:
   plan:
@@ -30,18 +33,18 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_{0}', matrix.env)] }}:role/coupon-${{ matrix.env }}-cicd-plan-role
+          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_COUPON_{0}', matrix.env)] }}:role/coupon-${{ matrix.env }}-cicd-plan-role
           aws-region: ap-northeast-1
 
       - name: Terraform Format Check
-        run: terraform -chdir=terraform-skeleton/environments/${{ matrix.env }} fmt -check -recursive
+        run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" fmt -check -recursive
         continue-on-error: true
 
       - name: Terraform Init
-        run: terraform -chdir=terraform-skeleton/environments/${{ matrix.env }} init
+        run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" init
 
       - name: Terraform Validate
-        run: terraform -chdir=terraform-skeleton/environments/${{ matrix.env }} validate
+        run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" validate
 
       - name: tflint
         uses: terraform-linters/setup-tflint@v4
@@ -50,27 +53,27 @@ jobs:
 
       - name: Run tflint
         run: |
-          cd terraform-skeleton
+          cd "${TF_BASE}"
           tflint --init
           tflint --recursive
 
       - name: tfsec
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
-          working_directory: terraform-skeleton
+          working_directory: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton
           soft_fail: false
 
       - name: Checkov
         uses: bridgecrewio/checkov-action@master
         with:
-          directory: terraform-skeleton/environments/${{ matrix.env }}
+          directory: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/environments/${{ matrix.env }}
           framework: terraform
           soft_fail: false
 
       - name: Terraform Plan
         id: plan
         run: |
-          terraform -chdir=terraform-skeleton/environments/${{ matrix.env }} plan \
+          terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" plan \
             -out=tfplan \
             -no-color \
             -input=false
@@ -78,6 +81,6 @@ jobs:
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ matrix.env }}-${{ github.run_id }}
-          path: terraform-skeleton/environments/${{ matrix.env }}/tfplan
+          name: coupon-tfplan-${{ matrix.env }}-${{ github.run_id }}
+          path: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/environments/${{ matrix.env }}/tfplan
           retention-days: 30

@@ -1,4 +1,4 @@
-name: Terraform Apply
+name: coupon Terraform Apply
 
 on:
   workflow_dispatch:
@@ -17,6 +17,9 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  TF_BASE: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton
+
 jobs:
   check-change-calendar:
     runs-on: ubuntu-latest
@@ -26,7 +29,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_{0}', inputs.env)] }}:role/coupon-${{ inputs.env }}-cicd-apply-role
+          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_COUPON_{0}', inputs.env)] }}:role/coupon-${{ inputs.env }}-cicd-apply-role
           aws-region: ap-northeast-1
 
       - name: Check Change Calendar (PROD only)
@@ -54,7 +57,7 @@ jobs:
     needs: check-change-calendar
     if: needs.check-change-calendar.outputs.can_deploy == 'true'
     environment:
-      name: ${{ inputs.env }}
+      name: coupon-${{ inputs.env }}
       # GitHub Environment 設定で承認者を指定 (PROD は 2 名)
 
     steps:
@@ -68,22 +71,22 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_{0}', inputs.env)] }}:role/coupon-${{ inputs.env }}-cicd-apply-role
+          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_COUPON_{0}', inputs.env)] }}:role/coupon-${{ inputs.env }}-cicd-apply-role
           aws-region: ap-northeast-1
 
       - name: Terraform Init
-        run: terraform -chdir=terraform-skeleton/environments/${{ inputs.env }} init
+        run: terraform -chdir="${TF_BASE}/environments/${{ inputs.env }}" init
 
       - name: Terraform Plan
         run: |
-          terraform -chdir=terraform-skeleton/environments/${{ inputs.env }} plan \
+          terraform -chdir="${TF_BASE}/environments/${{ inputs.env }}" plan \
             -out=tfplan \
             -input=false
 
       - name: Terraform Apply
         id: apply
         run: |
-          terraform -chdir=terraform-skeleton/environments/${{ inputs.env }} apply \
+          terraform -chdir="${TF_BASE}/environments/${{ inputs.env }}" apply \
             -input=false \
             tfplan 2>&1 | tee /tmp/apply.log
 
@@ -98,6 +101,6 @@ jobs:
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
-          SLACK_TITLE: 'Terraform Apply ${{ inputs.env }} (${{ job.status }})'
+          SLACK_TITLE: 'coupon Terraform Apply ${{ inputs.env }} (${{ job.status }})'
           SLACK_MESSAGE: 'Run ID: ${{ github.run_id }}'
           SLACK_COLOR: ${{ job.status == 'success' && 'good' || 'danger' }}

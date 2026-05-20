@@ -5,11 +5,11 @@ variable "prefix" {
 
 variable "buckets" {
   type = map(object({
-    force_destroy        = bool
-    versioning_enabled   = bool
-    object_lock_mode     = string         # null / "GOVERNANCE" / "COMPLIANCE"
-    object_lock_days     = number
-    kms_key_arn          = string
+    force_destroy      = bool
+    versioning_enabled = bool
+    object_lock_mode   = string # null / "GOVERNANCE" / "COMPLIANCE"
+    object_lock_days   = number
+    kms_key_arn        = string
     lifecycle_rules = list(object({
       id              = string
       transitions     = list(object({ days = number, storage_class = string }))

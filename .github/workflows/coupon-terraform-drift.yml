@@ -1,4 +1,4 @@
-name: Terraform Drift Detection
+name: coupon Terraform Drift Detection
 
 on:
   schedule:
@@ -8,6 +8,9 @@ on:
 permissions:
   id-token: write
   contents: read
+
+env:
+  TF_BASE: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton
 
 jobs:
   drift-detect:
@@ -28,17 +31,17 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_{0}', matrix.env)] }}:role/coupon-${{ matrix.env }}-cicd-plan-role
+          role-to-assume: arn:aws:iam::${{ secrets[format('AWS_ACCOUNT_COUPON_{0}', matrix.env)] }}:role/coupon-${{ matrix.env }}-cicd-plan-role
           aws-region: ap-northeast-1
 
       - name: Terraform Init
-        run: terraform -chdir=terraform-skeleton/environments/${{ matrix.env }} init
+        run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" init
 
       - name: Terraform Plan (detect drift)
         id: plan
         run: |
           set +e
-          terraform -chdir=terraform-skeleton/environments/${{ matrix.env }} plan -detailed-exitcode -no-color
+          terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" plan -detailed-exitcode -no-color
           EXIT_CODE=$?
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
           # 0=no change, 2=drift, 1=error
@@ -49,6 +52,6 @@ jobs:
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_OPS }}
-          SLACK_TITLE: 'Terraform Drift Detected: ${{ matrix.env }}'
+          SLACK_TITLE: 'coupon Terraform Drift Detected: ${{ matrix.env }}'
           SLACK_MESSAGE: 'Run ID: ${{ github.run_id }}. Please investigate.'
           SLACK_COLOR: warning

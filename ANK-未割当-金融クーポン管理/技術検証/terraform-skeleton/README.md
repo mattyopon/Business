@@ -45,11 +45,22 @@ terraform-skeleton/
 ### 環境別 apply
 
 ```bash
-cd environments/mut
+cd ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/environments/mut
 terraform init
 terraform plan -out=tfplan
 terraform apply tfplan
 ```
+
+### CI/CD (GitHub Actions)
+
+ワークフローは **mono-repo (`mattyopon/Business`) のルート `.github/workflows/coupon-terraform-*.yml`** に配置している
+(GitHub Actions はリポジトリルートの `.github/workflows/` しか検出しないため)。
+`env.TF_BASE: ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton` で本ディレクトリを参照する。
+
+`paths` フィルタは `ANK-未割当-金融クーポン管理/技術検証/terraform-skeleton/**` でスコープしているので、
+他案件ディレクトリへのコミットでは起動しない。
+
+`secrets.AWS_ACCOUNT_COUPON_<env>` 命名で本案件専用の AWS account ID を mono-repo 全体で衝突しないよう分離している。
 
 ### モジュール参照例
 

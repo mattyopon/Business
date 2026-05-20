@@ -146,8 +146,155 @@ resource "aws_iam_role" "cicd_apply" {
   tags = var.tags
 }
 
+# apply 用 Permissions Boundary。
+# このスタックが作成する IAM Role/User に必ず付与し、特権昇格 (Allow="*"/PassRole 抜け道) を遮断する。
+resource "aws_iam_policy" "cicd_apply_boundary" {
+  count = var.create_cicd_roles ? 1 : 0
+
+  name        = "${var.prefix}-cicd-apply-boundary"
+  description = "Permissions boundary for IAM principals managed by this stack. Blocks privilege escalation."
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowScopedStackServices"
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "rds:*",
+          "rds-data:*",
+          "s3:*",
+          "ecs:*",
+          "ecr:Get*",
+          "ecr:BatchGet*",
+          "ecr:Describe*",
+          "ecr:List*",
+          "route53:*",
+          "elasticloadbalancing:*",
+          "autoscaling:*",
+          "application-autoscaling:*",
+          "logs:*",
+          "cloudwatch:*",
+          "sns:*",
+          "ce:*",
+          "ssm:Get*",
+          "ssm:Describe*",
+          "ssm:List*",
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "secretsmanager:Get*",
+          "secretsmanager:Describe*",
+          "secretsmanager:List*",
+          "kms:Decrypt",
+          "kms:Describe*",
+          "kms:GenerateDataKey*",
+          "kms:List*",
+          "iam:Get*",
+          "iam:List*",
+          "iam:PassRole",
+          "iam:CreateRole",
+          "iam:UpdateRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:CreatePolicy",
+          "iam:DeletePolicy",
+          "iam:CreatePolicyVersion",
+          "iam:DeletePolicyVersion",
+          "iam:SetDefaultPolicyVersion",
+          "iam:CreateServiceLinkedRole",
+          "sts:GetCallerIdentity",
+          "sts:DecodeAuthorizationMessage",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "DenyPrivilegeEscalation"
+        Effect   = "Deny"
+        Resource = "*"
+        Action = [
+          "iam:CreateUser",
+          "iam:CreateAccessKey",
+          "iam:DeleteUser",
+          "iam:CreateLoginProfile",
+          "iam:UpdateLoginProfile",
+          "iam:DeleteLoginProfile",
+          "iam:CreateOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:DeleteOpenIDConnectProvider",
+          "iam:CreateSAMLProvider",
+          "iam:UpdateSAMLProvider",
+          "iam:DeleteSAMLProvider",
+          "iam:AttachUserPolicy",
+          "iam:PutUserPolicy",
+        ]
+      },
+      {
+        Sid      = "DenyDestructiveAndAuditDisable"
+        Effect   = "Deny"
+        Resource = "*"
+        Action = [
+          "iam:DeleteRole",
+          "iam:DeleteRolePermissionsBoundary",
+          "kms:ScheduleKeyDeletion",
+          "kms:DisableKey",
+          "s3:DeleteBucket",
+          "s3:PutBucketPolicy",
+          "rds:DeleteDBCluster",
+          "rds:DeleteDBInstance",
+          "rds:ModifyDBClusterSnapshotAttribute",
+          "secretsmanager:DeleteSecret",
+          "cloudtrail:StopLogging",
+          "cloudtrail:DeleteTrail",
+          "cloudtrail:PutEventSelectors",
+          "config:DeleteConfigRule",
+          "config:DeleteConfigurationRecorder",
+          "config:DeleteDeliveryChannel",
+          "config:StopConfigurationRecorder",
+          "guardduty:DeleteDetector",
+          "guardduty:DisassociateFromMasterAccount",
+          "securityhub:DisableSecurityHub",
+        ]
+      },
+      {
+        Sid      = "DenyOrganizationAndAccount"
+        Effect   = "Deny"
+        Resource = "*"
+        Action = [
+          "organizations:*",
+          "account:*",
+          "billing:*",
+          "aws-portal:*",
+        ]
+      },
+      {
+        Sid    = "RequireBoundaryOnNewIamPrincipals"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateRole",
+          "iam:PutRolePermissionsBoundary",
+        ]
+        Resource = "*"
+        Condition = {
+          StringNotEquals = {
+            "iam:PermissionsBoundary" = "arn:aws:iam::${var.aws_account_id}:policy/${var.prefix}-cicd-apply-boundary"
+          }
+        }
+      },
+    ]
+  })
+
+  tags = var.tags
+}
+
 # apply 用の権限は環境別最小限。実装は別ファイルで管理推奨。
-# 例として PowerUser + IAM 制限を付与 (本番では環境別に最小化)
+# 重要: Action="*" は禁止。スタックが実際に管理するサービスのみ Allow し、
+#       Deny ブロックで特権昇格と監査無効化を多層的に防ぐ。
 resource "aws_iam_role_policy" "cicd_apply_min" {
   count = var.create_cicd_roles ? 1 : 0
 
@@ -158,21 +305,134 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = "*"
+        Sid    = "AllowScopedStackServices"
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "rds:*",
+          "rds-data:*",
+          "s3:*",
+          "ecs:*",
+          "ecr:Get*",
+          "ecr:BatchGet*",
+          "ecr:Describe*",
+          "ecr:List*",
+          "route53:*",
+          "elasticloadbalancing:*",
+          "autoscaling:*",
+          "application-autoscaling:*",
+          "logs:*",
+          "cloudwatch:*",
+          "sns:*",
+          "ce:*",
+          "ssm:Get*",
+          "ssm:Describe*",
+          "ssm:List*",
+          "ssm:PutParameter",
+          "ssm:DeleteParameter",
+          "secretsmanager:Get*",
+          "secretsmanager:Describe*",
+          "secretsmanager:List*",
+          "kms:Decrypt",
+          "kms:Describe*",
+          "kms:GenerateDataKey*",
+          "kms:List*",
+        ]
         Resource = "*"
       },
-      # 重要: 以下を明示的に Deny する (例)
       {
-        Effect = "Deny"
+        Sid    = "AllowIamForStackResources"
+        Effect = "Allow"
+        Action = [
+          "iam:Get*",
+          "iam:List*",
+          "iam:CreateRole",
+          "iam:UpdateRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:CreatePolicy",
+          "iam:DeletePolicy",
+          "iam:CreatePolicyVersion",
+          "iam:DeletePolicyVersion",
+          "iam:SetDefaultPolicyVersion",
+          "iam:CreateServiceLinkedRole",
+        ]
+        Resource = [
+          "arn:aws:iam::${var.aws_account_id}:role/${var.prefix}-*",
+          "arn:aws:iam::${var.aws_account_id}:policy/${var.prefix}-*",
+          "arn:aws:iam::${var.aws_account_id}:role/aws-service-role/*",
+        ]
+      },
+      {
+        Sid      = "AllowPassRoleForStackOnly"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:aws:iam::${var.aws_account_id}:role/${var.prefix}-*"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = [
+              "ecs-tasks.amazonaws.com",
+              "monitoring.rds.amazonaws.com",
+              "rds.amazonaws.com",
+              "ec2.amazonaws.com",
+              "lambda.amazonaws.com",
+              "events.amazonaws.com",
+            ]
+          }
+        }
+      },
+      {
+        Sid      = "RequireBoundaryOnRoleCreate"
+        Effect   = "Deny"
+        Action   = ["iam:CreateRole", "iam:PutRolePermissionsBoundary"]
+        Resource = "*"
+        Condition = {
+          StringNotEquals = {
+            "iam:PermissionsBoundary" = aws_iam_policy.cicd_apply_boundary[0].arn
+          }
+        }
+      },
+      {
+        Sid      = "DenyDestructiveAndAuditDisable"
+        Effect   = "Deny"
+        Resource = "*"
         Action = [
           "iam:DeleteRole",
           "iam:DeleteUser",
+          "iam:CreateUser",
+          "iam:CreateAccessKey",
+          "iam:CreateLoginProfile",
+          "iam:CreateOpenIDConnectProvider",
+          "iam:DeleteOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:CreateSAMLProvider",
+          "iam:DeleteRolePermissionsBoundary",
           "kms:ScheduleKeyDeletion",
-          "s3:DeleteBucket",  # PROD では特に保護
+          "kms:DisableKey",
+          "s3:DeleteBucket",
+          "rds:DeleteDBCluster",
+          "rds:DeleteDBInstance",
+          "secretsmanager:DeleteSecret",
+          "cloudtrail:StopLogging",
+          "cloudtrail:DeleteTrail",
+          "config:DeleteConfigRule",
+          "config:DeleteConfigurationRecorder",
+          "config:DeleteDeliveryChannel",
+          "config:StopConfigurationRecorder",
+          "guardduty:DeleteDetector",
+          "guardduty:DisassociateFromMasterAccount",
+          "securityhub:DisableSecurityHub",
+          "organizations:*",
+          "account:*",
+          "billing:*",
+          "aws-portal:*",
         ]
-        Resource = "*"
-      }
+      },
     ]
   })
 }

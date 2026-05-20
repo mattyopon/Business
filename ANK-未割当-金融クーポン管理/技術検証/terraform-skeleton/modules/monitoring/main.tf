@@ -111,7 +111,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_failover" {
   evaluation_periods  = 1
   threshold           = 0
   treat_missing_data  = "notBreaching"
-  metric_name         = "FailoverCapableDBClusterToPrimaryFailover"  # 例 (要確認: 実メトリクス名は engine version 依存)
+  metric_name         = "FailoverCapableDBClusterToPrimaryFailover" # 例 (要確認: 実メトリクス名は engine version 依存)
   namespace           = "AWS/RDS"
   period              = 60
   statistic           = "Sum"
@@ -123,6 +123,37 @@ resource "aws_cloudwatch_metric_alarm" "aurora_failover" {
   alarm_actions = [aws_sns_topic.alert["p1"].arn]
 
   tags = var.tags
+}
+
+data "aws_caller_identity" "current" {}
+
+# Cost Anomaly Detection サービスから cost トピックへ publish できるようにする。
+# costalerts.amazonaws.com は SNS:Publish 権限が無いとサブスクリプション作成自体失敗 or
+# サイレントに通知失敗するため、トピックポリシーで明示許可する。
+# 参考: AWS Cost Anomaly Detection 公式ドキュメント / Terraform aws_ce_anomaly_subscription 例。
+resource "aws_sns_topic_policy" "cost_anomaly" {
+  arn = aws_sns_topic.alert["cost"].arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowCostAnomalyDetectionPublish"
+        Effect    = "Allow"
+        Principal = { Service = "costalerts.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.alert["cost"].arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+          ArnLike = {
+            "aws:SourceArn" = "arn:aws:ce::${data.aws_caller_identity.current.account_id}:anomalysubscription/*"
+          }
+        }
+      }
+    ]
+  })
 }
 
 # Cost Anomaly Detection (案件用)
@@ -142,11 +173,14 @@ resource "aws_ce_anomaly_subscription" "this" {
     dimension {
       key           = "ANOMALY_TOTAL_IMPACT_PERCENTAGE"
       match_options = ["GREATER_THAN_OR_EQUAL"]
-      values        = ["30"]  # 30% 増で通知
+      values        = ["30"] # 30% 増で通知
     }
   }
   subscriber {
     type    = "SNS"
     address = aws_sns_topic.alert["cost"].arn
   }
+
+  # トピックポリシーが先に作られていないと Cost Anomaly Detection が publish 検証で失敗する。
+  depends_on = [aws_sns_topic_policy.cost_anomaly]
 }
