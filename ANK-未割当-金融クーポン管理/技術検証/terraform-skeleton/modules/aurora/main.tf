@@ -38,6 +38,36 @@ resource "aws_rds_cluster_parameter_group" "this" {
     value = "on"
   }
 
+  # FISC 第11版 / 金融庁 サイバーセキュリティGL / PCI-DSS v4.0 の監査ログ要件対応。
+  # pgAudit で SQL 実行を行レベルで記録 (出典: AWS Docs pgAudit on Aurora PostgreSQL)。
+  parameter {
+    name         = "shared_preload_libraries"
+    value        = "pgaudit"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name  = "pgaudit.role"
+    value = "rds_pgaudit"
+  }
+
+  parameter {
+    # 監査対象: DDL (テーブル定義変更) + WRITE (UPDATE/INSERT/DELETE/COPY) + ROLE (権限変更)。
+    # READ も含めると I/O が劇増するため、必要に応じて env で上書き可能。
+    name  = "pgaudit.log"
+    value = var.pgaudit_log_classes
+  }
+
+  parameter {
+    name  = "pgaudit.log_parameter"
+    value = "1"
+  }
+
+  parameter {
+    name  = "pgaudit.log_statement_once"
+    value = "1"
+  }
+
   tags = var.tags
 }
 
@@ -75,8 +105,15 @@ resource "aws_rds_cluster" "this" {
   skip_final_snapshot       = !var.deletion_protection
   final_snapshot_identifier = var.deletion_protection ? "${var.prefix}-final-${formatdate("YYYYMMDD-hhmmss", timestamp())}" : null
 
+  # postgresql ログを CloudWatch Logs に出力。pgAudit の出力もこれに乗る。
+  # CloudWatch Logs から Subscription Filter で S3 (Object Lock COMPLIANCE 7年) に転送する想定。
   enabled_cloudwatch_logs_exports     = ["postgresql"]
   iam_database_authentication_enabled = true
+
+  # FISC 第11版 / FSI Lens: 金融データへの全 SQL 操作証跡を Kinesis に出力 (改竄不能ストリーム)。
+  # 案件で必要な場合 env から activity_stream_kms_key_arn を設定すると有効化。
+  # (Activity Streams は async + sync の2モード、PCI-DSS では sync 推奨)
+  # 注: 別 resource で aws_rds_cluster_activity_stream を作る (cluster と分離 lifecycle のため)。
 
   performance_insights_enabled          = var.performance_insights_enabled
   performance_insights_kms_key_id       = var.performance_insights_enabled ? var.kms_key_arn : null
@@ -112,4 +149,17 @@ resource "aws_rds_cluster_instance" "this" {
   auto_minor_version_upgrade = false
 
   tags = var.tags
+}
+
+# Database Activity Streams (RDS Activity Streams)。
+# FISC 第11版 4.5 / PCI-DSS v4.0 Req10 の改竄不能監査証跡要件に対応。
+# Kinesis Data Stream に同期/非同期で全 SQL を吐き、改竄を物理的に不可能化する。
+resource "aws_rds_cluster_activity_stream" "this" {
+  count = var.activity_stream_kms_key_arn != null ? 1 : 0
+
+  resource_arn = aws_rds_cluster.this.arn
+  mode         = var.activity_stream_mode # "sync" (PCI推奨) or "async"
+  kms_key_id   = var.activity_stream_kms_key_arn
+
+  depends_on = [aws_rds_cluster_instance.this]
 }
