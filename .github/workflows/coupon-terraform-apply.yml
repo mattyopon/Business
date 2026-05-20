@@ -4,13 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       env:
-        description: 'Target Environment'
+        description: 'Target Environment (environments/ 配下に実在するもののみ。mut/lt/st 追加時はここを拡張)'
         required: true
         type: choice
         options:
-          - mut
-          - lt
-          - st
           - prod
 
 permissions:

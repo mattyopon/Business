@@ -8,9 +8,21 @@ terraform {
   }
 }
 
+locals {
+  # cicd_apply_min ポリシーで CreateRole に boundary 必須 Deny を付与しているため、
+  # 本モジュール内で作成する全 IAM Role に boundary を付ける必要がある。
+  # 優先順位: 外部指定 (var) > 本モジュールの cicd_apply_boundary > null (create_cicd_roles=false 時のみ)
+  effective_role_boundary_arn = (
+    var.iam_role_permissions_boundary_arn != null
+    ? var.iam_role_permissions_boundary_arn
+    : (var.create_cicd_roles ? aws_iam_policy.cicd_apply_boundary[0].arn : null)
+  )
+}
+
 # ECS Task Execution Role (共通)
 resource "aws_iam_role" "ecs_execution" {
-  name = "${var.prefix}-ecs-execution-role"
+  name                 = "${var.prefix}-ecs-execution-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -51,7 +63,8 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
 
 # Aurora Enhanced Monitoring Role
 resource "aws_iam_role" "aurora_monitoring" {
-  name = "${var.prefix}-aurora-monitoring-role"
+  name                 = "${var.prefix}-aurora-monitoring-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -87,7 +100,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 resource "aws_iam_role" "cicd_plan" {
   count = var.create_cicd_roles ? 1 : 0
 
-  name = "${var.prefix}-cicd-plan-role"
+  name                 = "${var.prefix}-cicd-plan-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -122,7 +136,8 @@ resource "aws_iam_role_policy_attachment" "cicd_plan_readonly" {
 resource "aws_iam_role" "cicd_apply" {
   count = var.create_cicd_roles ? 1 : 0
 
-  name = "${var.prefix}-cicd-apply-role"
+  name                 = "${var.prefix}-cicd-apply-role"
+  permissions_boundary = local.effective_role_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

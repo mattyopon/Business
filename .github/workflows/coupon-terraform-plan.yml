@@ -20,7 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: [mut, lt, st, prod]
+        # environments/ 配下に実在するディレクトリのみ。mut/lt/st 追加時にここを拡張する。
+        env: [prod]
 
     steps:
       - uses: actions/checkout@v4
