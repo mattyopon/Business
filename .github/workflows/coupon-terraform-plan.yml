@@ -52,6 +52,20 @@ jobs:
         run: |
           echo "TF_VAR_iam_role_permissions_boundary_arn=${{ secrets[format('IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_{0}', matrix.env)] }}" >> "$GITHUB_ENV"
 
+      # required な tfvars (cost_center / vpc_cidr / KMS ARNs / sg_aurora_id 等) を
+      # 環境別 multi-line secret COUPON_TFVARS_<ENV> (HCL の terraform.tfvars 形式) から
+      # ファイル化する。未設定の場合は terraform plan が required variable で落ちる
+      # (=fail-fast)。秘密値が PR に漏れないよう、必ず secret 経由で渡すこと。
+      - name: Prepare terraform.tfvars from secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          TFVARS_CONTENT="${{ secrets[format('COUPON_TFVARS_{0}', matrix.env)] }}"
+          if [[ -z "$TFVARS_CONTENT" ]]; then
+            echo "::warning::secret COUPON_TFVARS_${{ matrix.env }} is empty. terraform plan will fail with required-variable errors. Set this secret with the HCL content of terraform.tfvars."
+          fi
+          printf '%s\n' "$TFVARS_CONTENT" > "${TF_BASE}/environments/${{ matrix.env }}/terraform.tfvars"
+
       - name: Terraform Validate
         run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" validate
 

@@ -43,6 +43,18 @@ jobs:
         run: |
           echo "TF_VAR_iam_role_permissions_boundary_arn=${{ secrets[format('IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_{0}', matrix.env)] }}" >> "$GITHUB_ENV"
 
+      # required な tfvars を環境別 multi-line secret COUPON_TFVARS_<ENV> からファイル化する。
+      - name: Prepare terraform.tfvars from secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          TFVARS_CONTENT="${{ secrets[format('COUPON_TFVARS_{0}', matrix.env)] }}"
+          if [[ -z "$TFVARS_CONTENT" ]]; then
+            echo "::error::secret COUPON_TFVARS_${{ matrix.env }} is empty. Drift detection cannot run."
+            exit 1
+          fi
+          printf '%s\n' "$TFVARS_CONTENT" > "${TF_BASE}/environments/${{ matrix.env }}/terraform.tfvars"
+
       - name: Terraform Plan (detect drift)
         id: plan
         run: |

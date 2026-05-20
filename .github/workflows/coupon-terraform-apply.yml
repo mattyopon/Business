@@ -79,6 +79,18 @@ jobs:
         run: |
           echo "TF_VAR_iam_role_permissions_boundary_arn=${{ secrets[format('IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_{0}', inputs.env)] }}" >> "$GITHUB_ENV"
 
+      # required な tfvars を環境別 multi-line secret COUPON_TFVARS_<ENV> からファイル化する。
+      - name: Prepare terraform.tfvars from secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          TFVARS_CONTENT="${{ secrets[format('COUPON_TFVARS_{0}', inputs.env)] }}"
+          if [[ -z "$TFVARS_CONTENT" ]]; then
+            echo "::error::secret COUPON_TFVARS_${{ inputs.env }} is empty. Cannot apply without required variables. Set this secret with the HCL content of terraform.tfvars."
+            exit 1
+          fi
+          printf '%s\n' "$TFVARS_CONTENT" > "${TF_BASE}/environments/${{ inputs.env }}/terraform.tfvars"
+
       - name: Terraform Plan
         run: |
           terraform -chdir="${TF_BASE}/environments/${{ inputs.env }}" plan \
@@ -87,7 +99,11 @@ jobs:
 
       - name: Terraform Apply
         id: apply
+        # GitHub Actions の bash デフォルトは -eo pipefail だが、レビュー指摘を受け
+        # 明示的に pipefail を宣言して tee 経由のサイレント成功偽装を二重で防ぐ。
+        shell: bash
         run: |
+          set -euo pipefail
           terraform -chdir="${TF_BASE}/environments/${{ inputs.env }}" apply \
             -input=false \
             tfplan 2>&1 | tee /tmp/apply.log

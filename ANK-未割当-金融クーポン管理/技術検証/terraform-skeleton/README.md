@@ -68,6 +68,7 @@ terraform apply tfplan
 |---|---|
 | `AWS_ACCOUNT_COUPON_<env>` | OIDC AssumeRole 対象アカウント ID |
 | `IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_<env>` | 環境別 IAM Permissions Boundary ARN。PF 提供 or iam モジュール作成の cicd_apply_boundary ARN を指す。未設定だと apply は IAM Deny で失敗する |
+| `COUPON_TFVARS_<env>` | 環境別 `terraform.tfvars` の HCL 全文 (multi-line secret)。`terraform.tfvars.example` を雛形に、cost_center / vpc_cidr / KMS ARN / SG ID 等を全て埋めて投入する。**シークレット値 (KMS ARN 等) を含むため必ず secret 経由、コミット禁止** |
 | `SLACK_WEBHOOK_OPS` | Slack 通知 webhook URL |
 
 ### モジュール参照例
