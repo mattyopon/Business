@@ -223,6 +223,8 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
           "iam:DeletePolicyVersion",
           "iam:SetDefaultPolicyVersion",
           "iam:CreateServiceLinkedRole",
+          # 既存ロールへの boundary 付与/変更を許可 (boundary 自身が intersection を取るため必要)。
+          "iam:PutRolePermissionsBoundary",
           "sts:GetCallerIdentity",
           "sts:DecodeAuthorizationMessage",
         ]
@@ -250,6 +252,9 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
         ]
       },
       {
+        # 注意: s3:PutBucketPolicy は modules/s3 が aws_s3_bucket_policy を扱うため
+        #       deny しない (Deny は Allow を上書きするためブロック必須運用が崩れる)。
+        #       バケットポリシー逸脱検知は AWS Config Rule 側で実施する想定。
         Sid      = "DenyDestructiveAndAuditDisable"
         Effect   = "Deny"
         Resource = "*"
@@ -259,7 +264,6 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
           "kms:ScheduleKeyDeletion",
           "kms:DisableKey",
           "s3:DeleteBucket",
-          "s3:PutBucketPolicy",
           "rds:DeleteDBCluster",
           "rds:DeleteDBInstance",
           "rds:ModifyDBClusterSnapshotAttribute",
@@ -376,6 +380,9 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
           "iam:DeletePolicyVersion",
           "iam:SetDefaultPolicyVersion",
           "iam:CreateServiceLinkedRole",
+          # 既存ロールに boundary を新規付与/変更するために必要。
+          # 同ポリシー下方の RequireBoundaryOnRoleCreate Deny で正しい boundary 以外は弾く。
+          "iam:PutRolePermissionsBoundary",
         ]
         Resource = [
           "arn:aws:iam::${var.aws_account_id}:role/${var.prefix}-*",
