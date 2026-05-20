@@ -48,3 +48,8 @@ variable "iam_role_aurora_monitoring_arn" {
   type        = string
   description = "Aurora Enhanced Monitoring IAM Role ARN"
 }
+
+variable "iam_role_permissions_boundary_arn" {
+  type        = string
+  description = "本環境で作成する IAM Role 全てに付与する Permissions Boundary ARN。CI apply role 側の RequireBoundaryOnRoleCreate Deny を満たすため、IAM Role を作るモジュール (vpc flow_logs / iam 配下のロール) に必ず渡す。PF 集中の場合は PF が用意した boundary、案件で作成する場合は iam モジュールの cicd_apply_boundary を指す。"
+}

@@ -232,6 +232,9 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
         Resource = "*"
       },
       {
+        # 注意: OIDC Provider 管理 (iam:*OpenIDConnectProvider) は本モジュールが
+        # create_github_oidc_provider=true 時に管理するため、ここで Deny しない。
+        # 代わりに AllowGithubOidcProviderManagement (下方) で github のみに scope する。
         Sid      = "DenyPrivilegeEscalation"
         Effect   = "Deny"
         Resource = "*"
@@ -242,15 +245,20 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
           "iam:CreateLoginProfile",
           "iam:UpdateLoginProfile",
           "iam:DeleteLoginProfile",
-          "iam:CreateOpenIDConnectProvider",
-          "iam:UpdateOpenIDConnectProviderThumbprint",
-          "iam:DeleteOpenIDConnectProvider",
           "iam:CreateSAMLProvider",
           "iam:UpdateSAMLProvider",
           "iam:DeleteSAMLProvider",
           "iam:AttachUserPolicy",
           "iam:PutUserPolicy",
         ]
+      },
+      {
+        # GitHub Actions OIDC Provider のみ管理可能。他の任意 OIDC 作成は遮断するため、
+        # Resource ARN を GitHub Actions の固定値に scope する。
+        Sid      = "AllowGithubOidcProviderManagement"
+        Effect   = "Allow"
+        Action   = ["iam:CreateOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint", "iam:DeleteOpenIDConnectProvider", "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider", "iam:AddClientIDToOpenIDConnectProvider", "iam:RemoveClientIDFromOpenIDConnectProvider"]
+        Resource = "arn:aws:iam::${var.aws_account_id}:oidc-provider/token.actions.githubusercontent.com"
       },
       {
         # 注意: s3:PutBucketPolicy は modules/s3 が aws_s3_bucket_policy を扱うため
@@ -424,6 +432,9 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
         }
       },
       {
+        # 注意: OIDC Provider 管理は AllowGithubOidcProviderManagement (boundary 側) と
+        #       対称に scope する。ここでは Deny しない (Deny は Allow を上書きするため)。
+        # 注意: s3:PutBucketPolicy も modules/s3 が必要とするため Deny しない。
         Sid      = "DenyDestructiveAndAuditDisable"
         Effect   = "Deny"
         Resource = "*"
@@ -433,9 +444,6 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
           "iam:CreateUser",
           "iam:CreateAccessKey",
           "iam:CreateLoginProfile",
-          "iam:CreateOpenIDConnectProvider",
-          "iam:DeleteOpenIDConnectProvider",
-          "iam:UpdateOpenIDConnectProviderThumbprint",
           "iam:CreateSAMLProvider",
           "iam:DeleteRolePermissionsBoundary",
           "kms:ScheduleKeyDeletion",
@@ -458,6 +466,13 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
           "billing:*",
           "aws-portal:*",
         ]
+      },
+      {
+        # GitHub Actions OIDC Provider のみ scope して許可 (boundary との対称)。
+        Sid      = "AllowGithubOidcProviderManagement"
+        Effect   = "Allow"
+        Action   = ["iam:CreateOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint", "iam:DeleteOpenIDConnectProvider", "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider", "iam:AddClientIDToOpenIDConnectProvider", "iam:RemoveClientIDFromOpenIDConnectProvider"]
+        Resource = "arn:aws:iam::${var.aws_account_id}:oidc-provider/token.actions.githubusercontent.com"
       },
     ]
   })

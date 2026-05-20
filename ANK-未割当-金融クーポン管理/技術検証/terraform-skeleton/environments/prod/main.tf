@@ -45,14 +45,15 @@ data "aws_caller_identity" "current" {}
 module "vpc" {
   source = "../../modules/vpc"
 
-  prefix                       = local.prefix
-  vpc_cidr                     = var.vpc_cidr
-  az_count                     = 3
-  create_nat_gateway           = false # PF 集中想定
-  create_isolated_batch_subnet = true
-  enable_flow_logs             = true
-  flow_log_retention_days      = 90
-  kms_key_arn                  = var.kms_key_arn_cw_logs # PF or 案件 KMS
+  prefix                            = local.prefix
+  vpc_cidr                          = var.vpc_cidr
+  az_count                          = 3
+  create_nat_gateway                = false # PF 集中想定
+  create_isolated_batch_subnet      = true
+  enable_flow_logs                  = true
+  flow_log_retention_days           = 90
+  kms_key_arn                       = var.kms_key_arn_cw_logs # PF or 案件 KMS
+  iam_role_permissions_boundary_arn = var.iam_role_permissions_boundary_arn
 }
 
 module "aurora" {
