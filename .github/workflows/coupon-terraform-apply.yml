@@ -80,16 +80,19 @@ jobs:
           echo "TF_VAR_iam_role_permissions_boundary_arn=${{ secrets[format('IAM_PERMISSIONS_BOUNDARY_ARN_COUPON_{0}', inputs.env)] }}" >> "$GITHUB_ENV"
 
       # required な tfvars を環境別 multi-line secret COUPON_TFVARS_<ENV> からファイル化する。
+      # secret は env 経由 (run 内 quote 展開で HCL の "..." を壊さないため)。
       - name: Prepare terraform.tfvars from secret
         shell: bash
+        env:
+          TFVARS_CONTENT: ${{ secrets[format('COUPON_TFVARS_{0}', inputs.env)] }}
+          TFVARS_PATH: ${{ inputs.env }}
         run: |
           set -euo pipefail
-          TFVARS_CONTENT="${{ secrets[format('COUPON_TFVARS_{0}', inputs.env)] }}"
-          if [[ -z "$TFVARS_CONTENT" ]]; then
-            echo "::error::secret COUPON_TFVARS_${{ inputs.env }} is empty. Cannot apply without required variables. Set this secret with the HCL content of terraform.tfvars."
+          if [[ -z "${TFVARS_CONTENT:-}" ]]; then
+            echo "::error::secret COUPON_TFVARS_${TFVARS_PATH} is empty. Cannot apply without required variables. Set this secret with the HCL content of terraform.tfvars."
             exit 1
           fi
-          printf '%s\n' "$TFVARS_CONTENT" > "${TF_BASE}/environments/${{ inputs.env }}/terraform.tfvars"
+          printf '%s\n' "${TFVARS_CONTENT}" > "${TF_BASE}/environments/${TFVARS_PATH}/terraform.tfvars"
 
       - name: Terraform Plan
         run: |

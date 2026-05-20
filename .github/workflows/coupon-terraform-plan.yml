@@ -54,17 +54,20 @@ jobs:
 
       # required な tfvars (cost_center / vpc_cidr / KMS ARNs / sg_aurora_id 等) を
       # 環境別 multi-line secret COUPON_TFVARS_<ENV> (HCL の terraform.tfvars 形式) から
-      # ファイル化する。未設定の場合は terraform plan が required variable で落ちる
-      # (=fail-fast)。秘密値が PR に漏れないよう、必ず secret 経由で渡すこと。
+      # ファイル化する。未設定の場合は terraform plan が required variable で落ちる (=fail-fast)。
+      # 重要: secret は env 経由で渡し、bash の引用符破壊や $ 展開を防ぐ
+      # (run の中で `${{ secrets.X }}` を直接 quote で囲うと HCL の "..." を shell が食って壊す)。
       - name: Prepare terraform.tfvars from secret
         shell: bash
+        env:
+          TFVARS_CONTENT: ${{ secrets[format('COUPON_TFVARS_{0}', matrix.env)] }}
+          TFVARS_PATH: ${{ matrix.env }}
         run: |
           set -euo pipefail
-          TFVARS_CONTENT="${{ secrets[format('COUPON_TFVARS_{0}', matrix.env)] }}"
-          if [[ -z "$TFVARS_CONTENT" ]]; then
-            echo "::warning::secret COUPON_TFVARS_${{ matrix.env }} is empty. terraform plan will fail with required-variable errors. Set this secret with the HCL content of terraform.tfvars."
+          if [[ -z "${TFVARS_CONTENT:-}" ]]; then
+            echo "::warning::secret COUPON_TFVARS_${TFVARS_PATH} is empty. terraform plan will fail with required-variable errors. Set this secret with the HCL content of terraform.tfvars."
           fi
-          printf '%s\n' "$TFVARS_CONTENT" > "${TF_BASE}/environments/${{ matrix.env }}/terraform.tfvars"
+          printf '%s\n' "${TFVARS_CONTENT:-}" > "${TF_BASE}/environments/${TFVARS_PATH}/terraform.tfvars"
 
       - name: Terraform Validate
         run: terraform -chdir="${TF_BASE}/environments/${{ matrix.env }}" validate
