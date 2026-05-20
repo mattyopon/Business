@@ -5,6 +5,8 @@
 
 ---
 
+![AWS Change Calendar - デプロイウィンドウ管理](../../figures/07_change_calendar.png)
+
 ## 1. Change Calendar とは
 
 - AWS Systems Manager の機能

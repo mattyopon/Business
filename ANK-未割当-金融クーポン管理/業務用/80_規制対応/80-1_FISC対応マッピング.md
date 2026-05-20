@@ -137,6 +137,9 @@ FISC 第 11 版は以下のカテゴリで構成される (詳細項目は購入
 
 ## 3. AWS Shared Responsibility Model
 
+![AWS 責任分界モデル (AWS / PF / 案件 の三者分割)](../../figures/10_shared_responsibility.png)
+
+
 ```
 ┌─────────────────────────────────────────┐
 │  顧客責任 (アプリ / データ / 設定)        │   ← 本案件
