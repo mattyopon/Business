@@ -206,6 +206,10 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
           "kms:Describe*",
           "kms:GenerateDataKey*",
           "kms:List*",
+          # AWS サービス統合 (Aurora/RDS/S3/CloudWatch/SNS 等) が CMK を使う際の必須権限
+          "kms:CreateGrant",
+          "kms:RevokeGrant",
+          "kms:ListGrants",
           # Terraform S3 backend の state lock 用 (DynamoDB)
           "dynamodb:GetItem",
           "dynamodb:PutItem",
@@ -371,6 +375,10 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
           "kms:Describe*",
           "kms:GenerateDataKey*",
           "kms:List*",
+          # AWS サービス統合 (Aurora/RDS/S3/CloudWatch/SNS 等) が CMK を使う際の必須権限
+          "kms:CreateGrant",
+          "kms:RevokeGrant",
+          "kms:ListGrants",
         ]
         Resource = "*"
       },
