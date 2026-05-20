@@ -60,30 +60,41 @@ data "aws_auditmanager_framework" "nist" {
 #   新設計: 明示的な principal ARN リスト (必須) + 任意で ArnLike 条件 (SSO 動的 suffix 対応)
 # 出典: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html
 #       https://aws.amazon.com/blogs/security/how-to-use-trust-policies-with-iam-roles/
+#
+# Codex P1 対応 (2026-05-20 3rd review): jsonencode は null 値の map key を omit せず
+# "Condition":null として literal 出力するため、IAM が malformed policy として reject する。
+# 三項演算子で map 構造を切り替えると Terraform の type consistency check で fail するため、
+# aws_iam_policy_document data source + dynamic block を使った idiomatic な方法で
+# Condition を任意で含める設計に変更。
+data "aws_iam_policy_document" "audit_owner_assume_role" {
+  statement {
+    sid     = "AuditOwnerAssumeRole"
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "AWS"
+      identifiers = var.audit_owner_trusted_principal_arns
+    }
+
+    # SSO 動的 suffix のため Condition で role pattern を絞る場合に追加 (任意)
+    dynamic "condition" {
+      for_each = length(var.audit_owner_principal_arn_like_patterns) > 0 ? [1] : []
+      content {
+        test     = "ArnLike"
+        variable = "aws:PrincipalArn"
+        values   = var.audit_owner_principal_arn_like_patterns
+      }
+    }
+  }
+}
+
 resource "aws_iam_role" "audit_owner" {
   count                = var.enable ? 1 : 0
   name                 = "${var.prefix}-audit-manager-owner-role"
   permissions_boundary = var.iam_role_permissions_boundary_arn
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          # 必須: 明示的に principal ARN を列挙 (空リストは precondition で阻止)
-          AWS = var.audit_owner_trusted_principal_arns
-        }
-        Action = "sts:AssumeRole"
-        # SSO 動的 suffix のため Condition で role pattern を絞る場合に使用 (任意)
-        Condition = length(var.audit_owner_principal_arn_like_patterns) > 0 ? {
-          ArnLike = {
-            "aws:PrincipalArn" = var.audit_owner_principal_arn_like_patterns
-          }
-        } : null
-      }
-    ]
-  })
+  assume_role_policy = data.aws_iam_policy_document.audit_owner_assume_role.json
 
   lifecycle {
     precondition {
