@@ -206,6 +206,11 @@ resource "aws_iam_policy" "cicd_apply_boundary" {
           "kms:Describe*",
           "kms:GenerateDataKey*",
           "kms:List*",
+          # Terraform S3 backend の state lock 用 (DynamoDB)
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable",
           "iam:Get*",
           "iam:List*",
           "iam:PassRole",
@@ -368,6 +373,18 @@ resource "aws_iam_role_policy" "cicd_apply_min" {
           "kms:List*",
         ]
         Resource = "*"
+      },
+      {
+        # Terraform S3 backend の state lock (DynamoDB) アクセス。テーブル名は env/prefix で命名統一されている想定。
+        Sid    = "AllowDynamoDBStateLock"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable",
+        ]
+        Resource = "arn:aws:dynamodb:*:${var.aws_account_id}:table/${var.prefix}-tf-state-lock"
       },
       {
         Sid    = "AllowIamForStackResources"
