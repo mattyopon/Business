@@ -106,10 +106,10 @@ resource "aws_rds_global_cluster" "this" {
   # source_db_cluster_identifier は使わない (本 cluster を初回作成として global に登録)。
   # 既存 cluster を global にする場合は source_db_cluster_identifier を指定する。
 
-  lifecycle {
-    # secondary cluster の追加で engine_version が microversion 更新される可能性に対応
-    ignore_changes = [engine_version]
-  }
+  # Codex P1 (2026-05-20): 旧設計では engine_version を ignore していたが、
+  # それだと global cluster 経由でも security patch upgrade を Terraform で当てられないため除去。
+  # 運用上: aws が microversion を auto-apply した場合、次回 plan で drift が出るので
+  # var.engine_version を最新値に揃えてから apply するか `terraform plan -refresh-only` で吸収する。
 }
 
 # =============================================================================
@@ -125,7 +125,31 @@ resource "aws_rds_global_cluster" "this" {
 #   両者は属性的にほぼ同一だが、lifecycle.ignore_changes はリテラルしか書けないため
 #   Terraform の制約上 2 resource に分離するしかない (HCL 仕様)。
 # 下流参照は locals.cluster_* に集約し、消費側は分岐を意識しなくて済む。
+#
+# Codex P1 (2026-05-20 2nd review): state migration の moved block を追加。
+#   既存 state で aws_rds_cluster.this を使っていた deployment は、enable_global_database
+#   の値に応じて自動的に standalone[0] / global_primary[0] へ move される。
+#   両 moved block の destination は count 切替により片方しか存在しないため、Terraform は
+#   存在する方の destination だけ rename を実行する (no-op になる方は安全に無視)。
+#
+# 注: enable_global_database を後から true⇔false 切替する場合、cluster_identifier が
+#   両 resource で同一なので AWS 側で名前衝突を起こす。切替時は手動で
+#   `terraform state mv aws_rds_cluster.standalone[0] aws_rds_cluster.global_primary[0]`
+#   (もしくは逆方向) を実行してから apply するか、一度別の cluster_identifier に rename して
+#   段階的に移行すること (運用 runbook 必須)。
 # =============================================================================
+
+# 注: Terraform は同一 from を持つ moved を 2 つ書けない (duplicate move error)。
+# enable_global_database=false (default) を「ありがちな既存 state」とみなして
+# standalone[0] への移行のみ自動化する。
+# 既存 state で enable_global_database=true で運用していたデプロイメントから
+# 本コード移行する場合は、apply 前に手動で
+#   terraform state mv 'aws_rds_cluster.standalone[0]' 'aws_rds_cluster.global_primary[0]'
+# を実行すること。
+moved {
+  from = aws_rds_cluster.this
+  to   = aws_rds_cluster.standalone[0]
+}
 
 resource "aws_rds_cluster" "standalone" {
   count = var.enable_global_database ? 0 : 1

@@ -54,6 +54,12 @@ data "aws_auditmanager_framework" "nist" {
 }
 
 # Step 3: assessment 用 IAM Role (process owner) を作成
+#
+# CodeRabbit Major 対応 (2026-05-20): least-privilege 化。
+#   旧設計: Principal = account_id → アカウント全体に AssumeRole 信頼を渡してしまう
+#   新設計: 明示的な principal ARN リスト (必須) + 任意で ArnLike 条件 (SSO 動的 suffix 対応)
+# 出典: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html
+#       https://aws.amazon.com/blogs/security/how-to-use-trust-policies-with-iam-roles/
 resource "aws_iam_role" "audit_owner" {
   count                = var.enable ? 1 : 0
   name                 = "${var.prefix}-audit-manager-owner-role"
@@ -61,15 +67,30 @@ resource "aws_iam_role" "audit_owner" {
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        # 評価責任者 (人間) がこの role を AssumeRole する想定。SAML/IDC integration は env 側で trust 拡張。
-        AWS = data.aws_caller_identity.current.account_id
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          # 必須: 明示的に principal ARN を列挙 (空リストは precondition で阻止)
+          AWS = var.audit_owner_trusted_principal_arns
+        }
+        Action = "sts:AssumeRole"
+        # SSO 動的 suffix のため Condition で role pattern を絞る場合に使用 (任意)
+        Condition = length(var.audit_owner_principal_arn_like_patterns) > 0 ? {
+          ArnLike = {
+            "aws:PrincipalArn" = var.audit_owner_principal_arn_like_patterns
+          }
+        } : null
       }
-      Action = "sts:AssumeRole"
-    }]
+    ]
   })
+
+  lifecycle {
+    precondition {
+      condition     = length(var.audit_owner_trusted_principal_arns) > 0
+      error_message = "audit_owner_trusted_principal_arns は least-privilege のため必須。明示的な IAM principal ARN を 1 つ以上指定すること (例: ['arn:aws:iam::ACCOUNT_ID:role/AWSReservedSSO_AuditAdmin_xxxx'])。SSO 動的 suffix 対応には audit_owner_principal_arn_like_patterns も併用可"
+    }
+  }
 
   tags = var.tags
 }
@@ -118,7 +139,7 @@ resource "aws_auditmanager_assessment" "pci" {
 
   lifecycle {
     precondition {
-      condition     = var.reports_bucket_name != null && var.reports_bucket_name != ""
+      condition     = var.reports_bucket_name != null && trimspace(var.reports_bucket_name) != ""
       error_message = "enable_pci_assessment=true のとき reports_bucket_name は必須 (Object Lock COMPLIANCE 推奨の S3 bucket 名を指定してください)"
     }
   }
@@ -159,7 +180,7 @@ resource "aws_auditmanager_assessment" "nist" {
 
   lifecycle {
     precondition {
-      condition     = var.reports_bucket_name != null && var.reports_bucket_name != ""
+      condition     = var.reports_bucket_name != null && trimspace(var.reports_bucket_name) != ""
       error_message = "enable_nist_assessment=true のとき reports_bucket_name は必須 (Object Lock COMPLIANCE 推奨の S3 bucket 名を指定してください)"
     }
   }
