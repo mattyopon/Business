@@ -79,6 +79,39 @@ resource "aws_db_parameter_group" "this" {
   tags = var.tags
 }
 
+# =============================================================================
+# Aurora Global Database (cross-region DR)
+#
+# FISC 5.1 / FSI Lens Reliability / 金融庁 GL BCP 要件:
+# - 単一 region 障害でもサービス継続可能 (RPO < 1秒、RTO < 1分)
+# - 同期 (sync) ではなく storage-level async レプリケーション
+#
+# 設計:
+# - global_cluster は primary region 側で作成 (本モジュール)
+# - secondary region cluster は env 側で別 provider alias で
+#   別 modules/aurora インスタンスを使うか、aws_rds_cluster を直接定義
+# - global_cluster_identifier を共有
+# - secondary cluster は replication_source_identifier に primary ARN
+# - 注意: primary 削除前に secondary を detach する手順が必要 (運用 runbook 必須)
+# =============================================================================
+resource "aws_rds_global_cluster" "this" {
+  count = var.enable_global_database ? 1 : 0
+
+  global_cluster_identifier = "${var.prefix}-aurora-global"
+  engine                    = "aurora-postgresql"
+  engine_version            = var.engine_version
+  database_name             = var.database_name
+  storage_encrypted         = true
+  deletion_protection       = var.deletion_protection
+  # source_db_cluster_identifier は使わない (本 cluster を初回作成として global に登録)。
+  # 既存 cluster を global にする場合は source_db_cluster_identifier を指定する。
+
+  lifecycle {
+    # secondary cluster の追加で engine_version が microversion 更新される可能性に対応
+    ignore_changes = [engine_version]
+  }
+}
+
 resource "aws_rds_cluster" "this" {
   cluster_identifier            = "${var.prefix}-aurora-cluster"
   engine                        = "aurora-postgresql"
@@ -87,6 +120,9 @@ resource "aws_rds_cluster" "this" {
   master_username               = var.master_username
   manage_master_user_password   = true
   master_user_secret_kms_key_id = var.kms_key_arn
+
+  # Aurora Global Database 連携: global cluster の primary cluster としてアタッチ
+  global_cluster_identifier = var.enable_global_database ? aws_rds_global_cluster.this[0].id : null
 
   storage_encrypted = true
   # 注意: Aurora の暗号化キーは作成時にしか指定できない (変更不可)
@@ -123,6 +159,8 @@ resource "aws_rds_cluster" "this" {
     ignore_changes = [
       master_username,
       final_snapshot_identifier,
+      # global cluster へ join 後は engine_version が global 側で管理されるため drift しがち
+      engine_version,
     ]
   }
 

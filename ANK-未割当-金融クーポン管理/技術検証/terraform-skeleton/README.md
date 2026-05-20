@@ -26,7 +26,8 @@ terraform-skeleton/
 │   ├── cloudtrail/         # Multi-region trail + log file integrity + CloudTrail Lake               ★ FISC/PCI
 │   ├── vpc_endpoints/      # PrivateLink (S3/DynamoDB/KMS/SecretsManager/STS/Logs/ECR/SSM)            ★ FSI Lens
 │   ├── backup/             # AWS Backup + Vault Lock + cross-region copy                              ★ FISC
-│   └── waf/                # WAFv2 (Managed Rules + rate limit + geo block + logging)                 ★ PCI-DSS Req6.4
+│   ├── waf/                # WAFv2 (Managed Rules + rate limit + geo block + logging)                 ★ PCI-DSS Req6.4
+│   └── audit_manager/      # AWS Audit Manager + PCI/NIST 800-53 標準 framework assessment            ★ PCI v4 / J-SOX
 ├── environments/           # 環境別構成
 │   └── prod/
 ├── COMPLIANCE.md           # FISC / FSI Lens / PCI / NIST 適合マトリクス
@@ -39,7 +40,7 @@ terraform-skeleton/
 |---|---|---|---|
 | vpc | VPC / Subnet / Route Table / NAT GW (オプション) / Flow Logs | aws_vpc, aws_subnet, aws_flow_log | FISC 6.2 |
 | ecs | ECS Cluster / Service / Task Definition | aws_ecs_cluster, aws_ecs_service | - |
-| aurora | Aurora PostgreSQL + pgAudit + Activity Streams | aws_rds_cluster, aws_rds_cluster_activity_stream | **FISC 4.5 / PCI Req10** |
+| aurora | Aurora PostgreSQL + pgAudit + Activity Streams + Global Database (optional) | aws_rds_cluster, aws_rds_cluster_activity_stream, aws_rds_global_cluster | **FISC 4.5 / 5.1 / PCI Req10** |
 | s3 | S3 Bucket / Versioning / Object Lock COMPLIANCE / Lifecycle / ssl_only | aws_s3_bucket_*, aws_s3_bucket_policy | **FISC / e-文書法 / PCI Req4** |
 | iam | IAM Role / Policy / OIDC Provider / Permissions Boundary | aws_iam_role, aws_iam_policy | **FSI Lens / FISC 6.5** |
 | route53 | Hosted Zone / Record | aws_route53_zone, aws_route53_record | - |
@@ -49,6 +50,7 @@ terraform-skeleton/
 | **vpc_endpoints** | AWS PrivateLink (S3/DynamoDB/KMS/SecretsManager/STS/Logs/ECR/SSM/...) | aws_vpc_endpoint, aws_security_group | **FSI Lens SbD / FISC 6.2** |
 | **backup** | AWS Backup vault + plan + selection + Vault Lock + cross-region copy | aws_backup_vault, aws_backup_plan, aws_backup_vault_lock_configuration | **FISC 5.1 / e-文書法** |
 | **waf** | WAFv2 Web ACL (Managed Rules + rate limit + geo block) + logging | aws_wafv2_web_acl, aws_wafv2_web_acl_association, aws_wafv2_web_acl_logging_configuration | **PCI Req6.4 / 金融庁GL** |
+| **audit_manager** | AWS Audit Manager 継続評価 (PCI / NIST 800-53 標準 framework + PROCESS_OWNER role + S3 evidence destination) | aws_auditmanager_account_registration, aws_auditmanager_assessment, data.aws_auditmanager_framework | **PCI v4 自動 evidence / J-SOX 内部統制** |
 
 ## 利用方法
 

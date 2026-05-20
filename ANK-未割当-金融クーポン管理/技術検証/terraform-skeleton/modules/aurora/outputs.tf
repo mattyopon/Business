@@ -33,3 +33,18 @@ output "instance_endpoints" {
   description = "各 Aurora インスタンスの Endpoint"
   value       = aws_rds_cluster_instance.this[*].endpoint
 }
+
+output "cluster_resource_id" {
+  description = "Aurora cluster resource ID (IAM DB Auth で使用)"
+  value       = aws_rds_cluster.this.cluster_resource_id
+}
+
+output "global_cluster_id" {
+  description = "Aurora Global Cluster identifier (secondary region cluster の global_cluster_identifier に使用)"
+  value       = try(aws_rds_global_cluster.this[0].id, null)
+}
+
+output "global_cluster_arn" {
+  description = "Aurora Global Cluster ARN"
+  value       = try(aws_rds_global_cluster.this[0].arn, null)
+}
