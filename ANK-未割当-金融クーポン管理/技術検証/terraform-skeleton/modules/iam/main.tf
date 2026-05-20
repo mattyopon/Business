@@ -132,6 +132,30 @@ resource "aws_iam_role_policy_attachment" "cicd_plan_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
+# ReadOnlyAccess は DynamoDB の Put/DeleteItem を含まないため、
+# Terraform S3 backend の state lock 取得/解放のための最小権限を別途付与する。
+resource "aws_iam_role_policy" "cicd_plan_state_lock" {
+  count = var.create_cicd_roles ? 1 : 0
+
+  name = "${var.prefix}-cicd-plan-state-lock-policy"
+  role = aws_iam_role.cicd_plan[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "AllowStateLockTableAccess"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:DescribeTable",
+      ]
+      Resource = "arn:aws:dynamodb:*:${var.aws_account_id}:table/${var.prefix}-tf-state-lock"
+    }]
+  })
+}
+
 # CI/CD Apply Role (環境別、最小権限のみ)
 resource "aws_iam_role" "cicd_apply" {
   count = var.create_cicd_roles ? 1 : 0
