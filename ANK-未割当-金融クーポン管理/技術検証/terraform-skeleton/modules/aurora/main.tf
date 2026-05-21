@@ -132,20 +132,23 @@ resource "aws_rds_global_cluster" "this" {
 #   両 moved block の destination は count 切替により片方しか存在しないため、Terraform は
 #   存在する方の destination だけ rename を実行する (no-op になる方は安全に無視)。
 #
-# 注: enable_global_database を後から true⇔false 切替する場合、cluster_identifier が
-#   両 resource で同一なので AWS 側で名前衝突を起こす。切替時は手動で
-#   `terraform state mv aws_rds_cluster.standalone[0] aws_rds_cluster.global_primary[0]`
-#   (もしくは逆方向) を実行してから apply するか、一度別の cluster_identifier に rename して
-#   段階的に移行すること (運用 runbook 必須)。
+# Codex P1 4th review 対応 (2026-05-20): cluster_identifier 差別化により、
+#   - standalone: ${prefix}-aurora-cluster (旧 aws_rds_cluster.this と同一名)
+#   - global_primary: ${prefix}-aurora-cluster-global (新規・別 AWS リソース)
+# としたことで、enable_global_database 切替時の AWS 側衝突が物理的に発生しない。
+#
+# 既存 state migration 互換性:
+#   - 旧 module を enable_global_database=false で利用中 → moved block で
+#     aws_rds_cluster.this → aws_rds_cluster.standalone[0] へ in-place 移行 ✓
+#   - 旧 module を enable_global_database=true で利用中 → そもそも旧 module には
+#     global cluster サポートが無かった (この新 module が初導入) ため、該当 state は
+#     存在しない。よって global 用 moved block 不要 ✓
+#
+# 注: Terraform は同一 from を持つ moved を 2 つ書けない (duplicate move error)。
+#   今回は cluster_identifier 差別化で global 側は新規作成扱いとなるため、moved は
+#   standalone[0] への 1 本のみで論理的に充足。
 # =============================================================================
 
-# 注: Terraform は同一 from を持つ moved を 2 つ書けない (duplicate move error)。
-# enable_global_database=false (default) を「ありがちな既存 state」とみなして
-# standalone[0] への移行のみ自動化する。
-# 既存 state で enable_global_database=true で運用していたデプロイメントから
-# 本コード移行する場合は、apply 前に手動で
-#   terraform state mv 'aws_rds_cluster.standalone[0]' 'aws_rds_cluster.global_primary[0]'
-# を実行すること。
 moved {
   from = aws_rds_cluster.this
   to   = aws_rds_cluster.standalone[0]
@@ -202,7 +205,15 @@ resource "aws_rds_cluster" "standalone" {
 resource "aws_rds_cluster" "global_primary" {
   count = var.enable_global_database ? 1 : 0
 
-  cluster_identifier            = "${var.prefix}-aurora-cluster"
+  # Codex P1 4th review 対応 (2026-05-20): cluster_identifier に `-global` suffix を付与し、
+  # standalone (`${prefix}-aurora-cluster`) と物理的に別 AWS リソースとして分離。
+  # これで enable_global_database を後から true⇔false 切替する際の AWS 側名前衝突
+  # (両 resource が同一名で create を試みる) を回避する。
+  # ※ 後付け global 化は AWS Aurora Global Database の仕様上 in-place adoption 不可で、
+  #   primary を新規 cluster として作成 + 旧 standalone から手動で snapshot restore +
+  #   グローバルクラスタアタッチが必須。これは Terraform の制約ではなく AWS の制約。
+  #   skeleton としてはコード上の安全側に倒し、後付け切替は別運用 (snapshot 経由 DR) で行う前提。
+  cluster_identifier            = "${var.prefix}-aurora-cluster-global"
   engine                        = "aurora-postgresql"
   engine_version                = var.engine_version
   database_name                 = var.database_name
