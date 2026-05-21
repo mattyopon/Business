@@ -89,8 +89,15 @@ data "aws_iam_policy_document" "audit_owner_assume_role" {
   }
 }
 
+locals {
+  # Codex P2 5th review 対応 (2026-05-21): audit_owner role は assessment が有効な時のみ必要。
+  # var.enable のみで gate すると registration だけ有効化したいケース (両 assessment false)
+  # で principal precondition が常時 fail し、デフォルト構成で plan が壊れる。
+  audit_owner_role_enabled = var.enable && (var.enable_pci_assessment || var.enable_nist_assessment)
+}
+
 resource "aws_iam_role" "audit_owner" {
-  count                = var.enable ? 1 : 0
+  count                = local.audit_owner_role_enabled ? 1 : 0
   name                 = "${var.prefix}-audit-manager-owner-role"
   permissions_boundary = var.iam_role_permissions_boundary_arn
 
@@ -98,6 +105,7 @@ resource "aws_iam_role" "audit_owner" {
 
   lifecycle {
     precondition {
+      # この precondition は count >= 1 (= 少なくとも 1 つの assessment 有効) の時だけ評価される
       condition     = length(var.audit_owner_trusted_principal_arns) > 0
       error_message = "audit_owner_trusted_principal_arns は least-privilege のため必須。明示的な IAM principal ARN を 1 つ以上指定すること (例: ['arn:aws:iam::ACCOUNT_ID:role/AWSReservedSSO_AuditAdmin_xxxx'])。SSO 動的 suffix 対応には audit_owner_principal_arn_like_patterns も併用可"
     }
@@ -108,7 +116,7 @@ resource "aws_iam_role" "audit_owner" {
 
 # AuditManagerServiceRolePolicy 相当の最小限 (assessor 用)
 resource "aws_iam_role_policy_attachment" "audit_owner_readonly" {
-  count = var.enable ? 1 : 0
+  count = local.audit_owner_role_enabled ? 1 : 0
 
   role       = aws_iam_role.audit_owner[0].name
   policy_arn = "arn:aws:iam::aws:policy/AWSAuditManagerAdministratorAccess"
