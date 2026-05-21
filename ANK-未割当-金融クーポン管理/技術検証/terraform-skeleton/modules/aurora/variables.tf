@@ -116,6 +116,12 @@ variable "pgaudit_log_classes" {
   default     = "ddl,write,role"
 }
 
+variable "enable_global_database" {
+  type        = bool
+  description = "Aurora Global Database (cross-region DR) を有効化。true で aws_rds_global_cluster を作成、本 cluster を primary として attach。secondary region cluster は env 側で別 provider alias で定義する必要あり。FISC 5.1 / FSI Lens Reliability 要件"
+  default     = false
+}
+
 variable "activity_stream_kms_key_arn" {
   type        = string
   description = "RDS Database Activity Streams 用 KMS Key ARN。指定すると Activity Streams が有効化される (PCI-DSS Req10 / FISC 第11版 4.5 の改竄不能監査証跡対応)。null で無効。"

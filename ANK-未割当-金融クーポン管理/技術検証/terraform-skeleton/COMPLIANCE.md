@@ -54,7 +54,7 @@
 | Inspector v2 (ECR/EC2/Lambda) | NIST SI-2 / 金融庁GL | ⚙ | `modules/security_baseline` `aws_inspector2_enabler` |
 | Macie (S3 PII) | 個人情報保護法 / FISC | ⚙ | `modules/security_baseline` `aws_macie2_account` |
 | IAM Access Analyzer (外部公開) | FSI Lens Security | ⚙ | `modules/security_baseline` `aws_accessanalyzer_analyzer` (external_access + unused_access) |
-| AWS Audit Manager (PCI v4 / NIST) | PCI 4.0 自動 evidence collection | 🔜 | Phase 2 で `aws_auditmanager_assessment` 追加予定 |
+| AWS Audit Manager (PCI v4 / NIST) | PCI 4.0 自動 evidence collection | ⚙ | `modules/audit_manager` `aws_auditmanager_account_registration` + standard framework data source (PCI / NIST 800-53) + `aws_auditmanager_assessment` × 2 |
 
 ### D. ID & アクセス
 
@@ -85,7 +85,7 @@
 | 要件 | 出典 | 対応状況 | モジュール / 設定 |
 |---|---|---|---|
 | Multi-AZ Aurora | FSI Lens Reliability | ✅ | `modules/aurora` `instance_count=2` |
-| Aurora Global Database (cross-region) | FSI Lens Reliability / FISC 5.1 | 🔜 | env 側で `aws_rds_global_cluster` を別途定義想定 (本 PR 範囲外) |
+| Aurora Global Database (cross-region) | FSI Lens Reliability / FISC 5.1 | ⚙ | `modules/aurora` `aws_rds_global_cluster` (enable_global_database=true で有効化、primary 側 attach。secondary cluster は env 側で provider alias 経由) |
 | AWS Backup (cross-region copy) | FSI Lens / FISC 5.1 | ⚙ | `modules/backup` `aws_backup_plan` + `copy_action` |
 | AWS Backup Vault Lock COMPLIANCE | FISC / e-文書法 | ⚙ | `modules/backup` `aws_backup_vault_lock_configuration` |
 | S3 Cross-Region Replication | FISC 5.1 / 監査記録 BCP | 🔜 | `modules/s3` で audit-logs バケット の `aws_s3_bucket_replication_configuration` 追加 |
@@ -128,8 +128,8 @@
 
 優先度順:
 
-1. **🔜 [P1] AWS Audit Manager assessment (PCI v4 / NIST 800-53) を Terraform で provision** — `aws_auditmanager_assessment` + 評価フレームワーク選択
-2. **🔜 [P1] Aurora Global Database (cross-region)** — `aws_rds_global_cluster` + secondary region の `aws_rds_cluster`。RPO < 1 秒、RTO < 1 分
+1. ~~**[P1] AWS Audit Manager assessment**~~ → ✅ **対応済 (PR #10)**: `modules/audit_manager` で account_registration + PCI/NIST 標準 framework の data source 参照 + assessment + process owner role
+2. ~~**[P1] Aurora Global Database (cross-region)**~~ → ✅ **対応済 (PR #10)**: `modules/aurora` に `aws_rds_global_cluster` を追加、`enable_global_database=true` で primary cluster を global に attach。secondary region cluster は env 側で別 provider alias で定義
 3. **🔜 [P2] S3 Cross-Region Replication for audit-logs** — `aws_s3_bucket_replication_configuration` で ap-northeast-3 に複製
 4. **🔜 [P2] AWS Config Conformance Pack (PCI/NIST/HIPAA/CIS)** — `aws_config_conformance_pack` で複数 pack 投入
 5. **🔜 [P2] ALB Access Log → S3** — ECS module または alb module で `access_logs` 設定
